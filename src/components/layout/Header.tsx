@@ -86,7 +86,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { label: "Pedidos de Venda", href: "/vendas/pedidos", icon: ShoppingCart },
       { label: "Orçamentos", href: "/vendas/orcamentos", icon: Receipt },
-      { label: "Clientes", href: "/clientes", icon: Users },
+      { label: "Clientes", href: "/vendas/clientes", icon: Users },
       { label: "Produtos", href: "/produtos", icon: Package },
       {
         label: "Tabela de Preços",
@@ -145,8 +145,8 @@ const MENU_GROUPS: MenuGroup[] = [
     managerOnly: true,
     items: [
       {
-        label: "Tabelas de Atacado Pendentes",
-        href: "/aprovacoes/tabelas-atacado",
+        label: "Central de Aprovações",
+        href: "/gerencia/aprovacoes",
         icon: ShieldCheck,
       },
     ],
