@@ -103,7 +103,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { label: "Pedidos de Compra", href: "/compras/pedidos", icon: Truck },
       { label: "Fornecedores", href: "/fornecedores", icon: Factory },
-      { label: "Entradas de NF-e", href: "/compras/entradas-nfe", icon: FileInput },
+      { label: "Entradas de NF-e", href: "/compras/nfe", icon: FileInput },
     ],
   },
   {
