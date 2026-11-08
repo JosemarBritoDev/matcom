@@ -347,6 +347,8 @@ git push origin feat/nome-da-feature
 | Footer sobre conteúdo | Rodapé fixo | Garanta `pb-16` no `main` do layout |
 | Migration pendente em produção | `migrate deploy` não executado | Rode no build/CI |
 | Imagem white-label quebrada | URL inválida/CORS | Valide `logoUrl` e domínio permitido |
+| `Internal Server Error` em todas as rotas no `next dev` | `npm run build` executado com o dev server ativo: o build reescreve `.next` e corrompe o cache de desenvolvimento | Pare o dev server, apague `.next`, suba o `next dev` novamente. Nunca rode `next build` com o dev ativo |
+| Assets em `public/` retornando 404 | Arquivo ausente ou nome divergente | Confira `public/products/` e o caminho exato usado no componente (`.svg`, `.png`, etc.) |
 
 ---
 

@@ -1,5 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
+
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -108,6 +109,14 @@ const CUSTOMERS: Customer[] = [
     tierStatus: "APROVADO",
   },
 ];
+
+const FALLBACK_CUSTOMER: Customer = {
+  id: "consumidor-final",
+  name: "Consumidor final",
+  document: "Não informado",
+  tier: "VAREJO",
+  tierStatus: "APROVADO",
+};
 
 const PRODUCTS: Product[] = [
   {
@@ -229,7 +238,11 @@ function formatQuantity(value: number) {
   return quantityFormatter.format(value);
 }
 
-function formatDateTime(date: Date) {
+function formatDateTime(date: Date | null | undefined) {
+  if (!date || Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -373,7 +386,9 @@ function QuantityControl({
 /* -------------------------------------------------------------------------- */
 
 export default function PdvPage() {
-  const [customerId, setCustomerId] = useState(CUSTOMERS[0].id);
+  const [customerId, setCustomerId] = useState(
+    () => CUSTOMERS[0]?.id ?? FALLBACK_CUSTOMER.id,
+  );
   const [draftCode, setDraftCode] = useState(1051);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -389,7 +404,8 @@ export default function PdvPage() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const selectedCustomer =
-    CUSTOMERS.find((customer) => customer.id === customerId) ?? CUSTOMERS[0];
+    CUSTOMERS.find((customer) => customer.id === customerId) ??
+    FALLBACK_CUSTOMER;
 
   const defaultTier: PricingTier =
     selectedCustomer.tier === "ATACADO" &&
@@ -630,7 +646,7 @@ export default function PdvPage() {
                       const nextCustomer =
                         CUSTOMERS.find(
                           (customer) => customer.id === event.target.value,
-                        ) ?? CUSTOMERS[0];
+                        ) ?? FALLBACK_CUSTOMER;
 
                       setCustomerId(nextCustomer.id);
 
