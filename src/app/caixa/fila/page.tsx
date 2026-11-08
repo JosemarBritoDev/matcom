@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
+  AlertTriangle,
+  ArrowDownToLine,
   ArrowRight,
+  ArrowUpFromLine,
   BadgeCheck,
   Banknote,
   CalendarClock,
@@ -12,6 +15,10 @@ import {
   Clock,
   Copy,
   CreditCard,
+  DoorOpen,
+  Eye,
+  EyeOff,
+  KeyRound,
   Landmark,
   Lock,
   Printer,
@@ -19,8 +26,10 @@ import {
   Receipt,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Store,
   Truck,
+  Unlock,
   UserRound,
   Wallet,
   Warehouse,
@@ -37,6 +46,13 @@ type DeliveryMode = "RETIRADA" | "ENTREGA";
 type PricingTier = "VAREJO" | "ATACADO";
 type PrintVia = "CLIENTE" | "GALPAO";
 type ProductUnit = "m²" | "m³" | "kg" | "un" | "saco" | "caixa" | "lata";
+type CashMovementType = "ABERTURA" | "SANGRIA" | "SUPRIMENTO" | "GAVETA";
+type CashOperation =
+  | "ABERTURA"
+  | "SANGRIA"
+  | "SUPRIMENTO"
+  | "GAVETA"
+  | "FECHAMENTO";
 
 interface CashierItem {
   id: string;
@@ -83,6 +99,41 @@ interface PaidOrder {
   creditDays?: number;
 }
 
+interface CashMovement {
+  id: string;
+  type: CashMovementType;
+  amount: number;
+  reason: string;
+  operatorName: string;
+  authorizedBy?: string;
+  createdAt: Date;
+}
+
+interface SangriaReceiptData {
+  id: string;
+  amount: number;
+  reason: string;
+  authorizedBy: string;
+  operatorName: string;
+  createdAt: Date;
+  balanceAfter: number;
+}
+
+interface ClosingReportData {
+  closedAt: Date;
+  openedAt: string;
+  openingAmount: number;
+  totalSangria: number;
+  totalSuprimento: number;
+  cashSales: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  operatorName: string;
+  pendingOrders: number;
+  movements: CashMovement[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                    Dados                                   */
 /* -------------------------------------------------------------------------- */
@@ -102,6 +153,19 @@ const OPERATOR = {
 
 const CASH_OPENING = 500;
 const CASH_OPENED_AT = "08:00";
+
+const MANAGER_NAME = "Gerente MatCom";
+const MANAGER_PIN = "1975";
+
+const CASH_MOVEMENT_LABELS: Record<CashMovementType, string> = {
+  ABERTURA: "Abertura de caixa",
+  SANGRIA: "Sangria",
+  SUPRIMENTO: "Suprimento de troco",
+  GAVETA: "Abertura de gaveta",
+};
+
+const UNAUTHORIZED_SANGRIA_MESSAGE =
+  "Operação não autorizada. Exige validação do Gerente";
 
 const PIX_KEY = "12.345.678/0001-90";
 const MAX_INSTALLMENTS = 12;
@@ -407,6 +471,12 @@ function formatDateTime(date: Date | null | undefined) {
   }).format(date);
 }
 
+function formatTime(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeStyle: "short",
+  }).format(date);
+}
+
 function formatAmountInput(value: number) {
   return value.toFixed(2).replace(".", ",");
 }
@@ -556,6 +626,132 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       <Receipt className="h-3 w-3" aria-hidden />
       Aguardando caixa
     </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                    Componentes de operação do caixa                        */
+/* -------------------------------------------------------------------------- */
+
+type CashTone = "violet" | "amber" | "emerald" | "red" | "zinc";
+
+const MODAL_TONE_CLASSES: Record<CashTone, string> = {
+  violet:
+    "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300",
+  amber:
+    "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+  emerald:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  red: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+  zinc: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
+const TOOLBAR_TONE_CLASSES: Record<CashTone, string> = {
+  violet:
+    "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/70",
+  amber:
+    "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70",
+  emerald:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70",
+  red: "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70",
+  zinc: "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-200 dark:hover:bg-zinc-800/60",
+};
+
+function CashToolbarButton({
+  icon,
+  label,
+  hint,
+  tone,
+  onClick,
+  disabled = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint: string;
+  tone: CashTone;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 disabled:cursor-not-allowed disabled:opacity-50 ${TOOLBAR_TONE_CLASSES[tone]}`}
+    >
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-bold uppercase tracking-wide">
+          {label}
+        </span>
+        <span className="mt-0.5 block text-[10px] font-medium opacity-80">
+          {hint}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function CashModalShell({
+  id,
+  title,
+  subtitle,
+  icon,
+  tone = "violet",
+  onClose,
+  children,
+}: {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: ReactNode;
+  tone?: CashTone;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={id}
+      className="fixed inset-0 z-[75] flex items-end justify-center bg-zinc-950/60 p-4 backdrop-blur-sm print:hidden sm:items-center"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-200 p-5 dark:border-zinc-800">
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${MODAL_TONE_CLASSES[tone]}`}
+            >
+              {icon}
+            </span>
+            <div>
+              <h2 id={id} className="text-base font-bold tracking-tight">
+                {title}
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                {subtitle}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={`Fechar ${title}`}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -797,6 +993,167 @@ function WarehouseReceipt({ paid }: { paid: PaidOrder }) {
   );
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+function SangriaReceipt({ data }: { data: SangriaReceiptData }) {
+  return (
+    <div className="hidden w-[80mm] bg-white p-1 text-black print:block">
+      <ReceiptHeader via="Recibo de sangria" />
+
+      <div className="mt-1 space-y-0.5 text-[9px] leading-snug">
+        <p>
+          <strong>Recibo:</strong> {data.id}
+        </p>
+        <p>
+          <strong>Data:</strong> {formatDateTime(data.createdAt)}
+        </p>
+        <p>
+          <strong>Operador:</strong> {data.operatorName} ({OPERATOR.code})
+        </p>
+        <p>
+          <strong>Autorizado por:</strong> {data.authorizedBy}
+        </p>
+        <p>
+          <strong>Motivo:</strong> {data.reason}
+        </p>
+      </div>
+
+      <div className="my-2 border-t border-dashed border-black" />
+
+      <div className="flex items-baseline justify-between text-[12px] font-bold">
+        <span>VALOR DA SANGRIA</span>
+        <span>{formatBRL(data.amount)}</span>
+      </div>
+
+      <div className="mt-1 flex justify-between text-[9px]">
+        <span>Saldo em gaveta após retirada</span>
+        <span>{formatBRL(data.balanceAfter)}</span>
+      </div>
+
+      <div className="mt-2 border-t border-dashed border-black pt-1 text-[9px]">
+        <p>Declaro a retirada de espécie acima descrita.</p>
+        <div className="mt-6 border-t border-black pt-0.5 text-center text-[8px]">
+          Assinatura do operador
+        </div>
+        <div className="mt-5 border-t border-black pt-0.5 text-center text-[8px]">
+          Assinatura do Gerente
+        </div>
+      </div>
+
+      <ReceiptFooter />
+    </div>
+  );
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+function ClosingReport({ data }: { data: ClosingReportData }) {
+  const resultLabel =
+    data.difference === 0
+      ? "Caixa conferido"
+      : data.difference > 0
+        ? "Sobra de caixa"
+        : "Falta de caixa";
+
+  const cashMovements = data.movements.filter(
+    (movement) =>
+      movement.type === "SANGRIA" || movement.type === "SUPRIMENTO",
+  );
+
+  return (
+    <div className="hidden w-[80mm] bg-white p-1 text-black print:block">
+      <ReceiptHeader via="Fechamento de caixa — conferência" />
+
+      <div className="mt-1 space-y-0.5 text-[9px] leading-snug">
+        <p>
+          <strong>Fechamento:</strong> {formatDateTime(data.closedAt)}
+        </p>
+        <p>
+          <strong>Abertura:</strong> às {data.openedAt}
+        </p>
+        <p>
+          <strong>Operador:</strong> {data.operatorName} ({OPERATOR.code})
+        </p>
+        <p>
+          <strong>Comandas pendentes:</strong> {data.pendingOrders}
+        </p>
+      </div>
+
+      <div className="my-1 border-t border-dashed border-black" />
+
+      <div className="space-y-0.5 text-[9px]">
+        <div className="flex justify-between">
+          <span>Saldo inicial de troco</span>
+          <span>{formatBRL(data.openingAmount)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Suprimentos</span>
+          <span>+ {formatBRL(data.totalSuprimento)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Vendas em dinheiro</span>
+          <span>+ {formatBRL(data.cashSales)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Sangrias</span>
+          <span>- {formatBRL(data.totalSangria)}</span>
+        </div>
+        <div className="mt-1 flex justify-between border-t border-black pt-0.5 font-bold">
+          <span>Valor esperado em gaveta</span>
+          <span>{formatBRL(data.expectedCash)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Valor contado</span>
+          <span>{formatBRL(data.countedCash)}</span>
+        </div>
+        <div className="mt-1 flex justify-between border-t border-black pt-0.5 text-[11px] font-bold">
+          <span>Diferença</span>
+          <span>
+            {data.difference > 0 ? "+" : ""}
+            {formatBRL(data.difference)}
+          </span>
+        </div>
+        <div className="flex justify-between font-bold">
+          <span>Resultado</span>
+          <span>{resultLabel}</span>
+        </div>
+      </div>
+
+      {cashMovements.length > 0 && (
+        <>
+          <div className="my-1 border-t border-dashed border-black" />
+          <p className="text-[9px] font-bold uppercase">
+            Sangrias e suprimentos
+          </p>
+          <ul className="mt-0.5 space-y-0.5 text-[8px] leading-snug">
+            {cashMovements.map((movement) => (
+              <li key={movement.id} className="flex justify-between gap-1">
+                <span className="truncate">
+                  {formatTime(movement.createdAt)} ·{" "}
+                  {CASH_MOVEMENT_LABELS[movement.type]} · {movement.reason}
+                </span>
+                <span className="shrink-0 font-semibold">
+                  {formatBRL(movement.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <div className="mt-2 border-t border-dashed border-black pt-1 text-[9px]">
+        <p>Declaro a conferência do caixa acima descrita.</p>
+        <div className="mt-6 border-t border-black pt-0.5 text-center text-[8px]">
+          Assinatura do operador
+        </div>
+        <div className="mt-5 border-t border-black pt-0.5 text-center text-[8px]">
+          Assinatura do Gerente
+        </div>
+      </div>
+
+      <ReceiptFooter />
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                   Página                                   */
 /* -------------------------------------------------------------------------- */
@@ -813,6 +1170,16 @@ export default function FilaDoCaixaPage() {
     via: PrintVia;
   } | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
+  const [cashRegisterOpen, setCashRegisterOpen] = useState(true);
+  const [cashOperation, setCashOperation] = useState<CashOperation | null>(
+    null,
+  );
+  const [operationAmount, setOperationAmount] = useState("");
+  const [operationReason, setOperationReason] = useState("");
+  const [managerAuthorization, setManagerAuthorization] = useState("");
+  const [sangriaError, setSangriaError] = useState<string | null>(null);
+  const [managerPasswordVisible, setManagerPasswordVisible] = useState(false);
+  const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
 
   const panelRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1058,6 +1425,90 @@ export default function FilaDoCaixaPage() {
     setPrintRequest(null);
   }
 
+  function openCashOperation(operation: CashOperation) {
+    setOperationAmount("");
+    setOperationReason("");
+    setManagerAuthorization("");
+    setSangriaError(null);
+    setManagerPasswordVisible(false);
+    setCashOperation(operation);
+  }
+
+  function closeCashOperation() {
+    setCashOperation(null);
+    setSangriaError(null);
+  }
+
+  function handleCashOperation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!cashOperation) {
+      return;
+    }
+
+    if (cashOperation === "SANGRIA") {
+      const amount = parseAmount(operationAmount);
+
+      if (amount <= 0) {
+        setSangriaError("Informe um valor válido para a sangria.");
+        return;
+      }
+
+      if (!operationReason.trim()) {
+        setSangriaError("Informe o motivo da sangria.");
+        return;
+      }
+
+      if (managerAuthorization !== MANAGER_PIN) {
+        setSangriaError(UNAUTHORIZED_SANGRIA_MESSAGE);
+        return;
+      }
+
+      const movement: CashMovement = {
+        id: `mov-${Date.now()}`,
+        type: "SANGRIA",
+        amount,
+        reason: operationReason.trim(),
+        operatorName: OPERATOR.name,
+        authorizedBy: MANAGER_NAME,
+        createdAt: new Date(),
+      };
+
+      setCashMovements((current) => [...current, movement]);
+      closeCashOperation();
+      window.print();
+      return;
+    }
+
+    if (cashOperation === "ABERTURA") {
+      setCashRegisterOpen(true);
+    } else if (cashOperation === "FECHAMENTO") {
+      setCashRegisterOpen(false);
+    } else {
+      const amount = parseAmount(operationAmount);
+      const type: CashMovementType =
+        cashOperation === "SUPRIMENTO"
+          ? "SUPRIMENTO"
+          : cashOperation === "GAVETA"
+            ? "GAVETA"
+            : "ABERTURA";
+
+      setCashMovements((current) => [
+        ...current,
+        {
+          id: `mov-${Date.now()}`,
+          type,
+          amount,
+          reason: operationReason.trim() || CASH_MOVEMENT_LABELS[type],
+          operatorName: OPERATOR.name,
+          createdAt: new Date(),
+        },
+      ]);
+    }
+
+    closeCashOperation();
+  }
+
   return (
     <>
       <style>{`
@@ -1154,6 +1605,54 @@ export default function FilaDoCaixaPage() {
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* Ferramentas operacionais */}
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              <CashToolbarButton
+                icon={<Unlock className="h-4 w-4" />}
+                label="Abertura de caixa"
+                hint={cashRegisterOpen ? "Caixa aberto" : "Abrir turno"}
+                tone="emerald"
+                onClick={() => openCashOperation("ABERTURA")}
+                disabled={cashRegisterOpen}
+              />
+              <CashToolbarButton
+                icon={<ArrowDownToLine className="h-4 w-4" />}
+                label="Realizar sangria"
+                hint={
+                  cashMovements.length
+                    ? `${cashMovements.length} movimento(s) registrado(s)`
+                    : "Requer autorização"
+                }
+                tone="amber"
+                onClick={() => openCashOperation("SANGRIA")}
+                disabled={!cashRegisterOpen}
+              />
+              <CashToolbarButton
+                icon={<ArrowUpFromLine className="h-4 w-4" />}
+                label="Suprimento"
+                hint="Reforçar troco"
+                tone="violet"
+                onClick={() => openCashOperation("SUPRIMENTO")}
+                disabled={!cashRegisterOpen}
+              />
+              <CashToolbarButton
+                icon={<DoorOpen className="h-4 w-4" />}
+                label="Abrir gaveta"
+                hint="Movimento autorizado"
+                tone="zinc"
+                onClick={() => openCashOperation("GAVETA")}
+                disabled={!cashRegisterOpen}
+              />
+              <CashToolbarButton
+                icon={<Lock className="h-4 w-4" />}
+                label="Fechar caixa"
+                hint="Encerrar turno"
+                tone="red"
+                onClick={() => openCashOperation("FECHAMENTO")}
+                disabled={!cashRegisterOpen}
+              />
             </div>
 
             {/* Busca instantânea */}
@@ -2011,6 +2510,157 @@ export default function FilaDoCaixaPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Operações de caixa */}
+      {cashOperation && (
+        <CashModalShell
+          id="cash-operation-title"
+          title={
+            cashOperation === "SANGRIA"
+              ? "Realizar sangria"
+              : CASH_MOVEMENT_LABELS[
+                  cashOperation === "ABERTURA"
+                    ? "ABERTURA"
+                    : cashOperation === "SUPRIMENTO"
+                      ? "SUPRIMENTO"
+                      : cashOperation === "GAVETA"
+                        ? "GAVETA"
+                        : "ABERTURA"
+                ]
+          }
+          subtitle={
+            cashOperation === "SANGRIA"
+              ? "Autorização exclusiva de GERENTE_LOJA ou SUPER_ADMIN"
+              : "Registre o movimento do caixa"
+          }
+          icon={
+            cashOperation === "SANGRIA" ? (
+              <KeyRound className="h-5 w-5" aria-hidden />
+            ) : (
+              <SlidersHorizontal className="h-5 w-5" aria-hidden />
+            )
+          }
+          tone={cashOperation === "SANGRIA" ? "amber" : "violet"}
+          onClose={closeCashOperation}
+        >
+          <form onSubmit={handleCashOperation} className="space-y-3">
+            {cashOperation !== "GAVETA" && (
+              <div>
+                <label
+                  htmlFor="cash-operation-amount"
+                  className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                >
+                  Valor (R$)
+                </label>
+                <input
+                  id="cash-operation-amount"
+                  inputMode="decimal"
+                  required
+                  value={operationAmount}
+                  onChange={(event) =>
+                    setOperationAmount(sanitizeAmountInput(event.target.value))
+                  }
+                  placeholder="0,00"
+                  className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold focus:border-violet-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+            )}
+
+            {cashOperation !== "ABERTURA" &&
+              cashOperation !== "FECHAMENTO" && (
+                <div>
+                  <label
+                    htmlFor="cash-operation-reason"
+                    className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                  >
+                    Motivo
+                  </label>
+                  <textarea
+                    id="cash-operation-reason"
+                    required={cashOperation === "SANGRIA"}
+                    rows={2}
+                    value={operationReason}
+                    onChange={(event) =>
+                      setOperationReason(event.target.value.slice(0, 160))
+                    }
+                    placeholder="Descreva o movimento"
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                </div>
+              )}
+
+            {cashOperation === "SANGRIA" && (
+              <div>
+                <label
+                  htmlFor="manager-authorization"
+                  className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                >
+                  Senha de autorização do Gerente
+                </label>
+                <div className="relative mt-1">
+                  <input
+                    id="manager-authorization"
+                    type={managerPasswordVisible ? "text" : "password"}
+                    inputMode="numeric"
+                    required
+                    value={managerAuthorization}
+                    onChange={(event) => {
+                      setManagerAuthorization(event.target.value);
+                      setSangriaError(null);
+                    }}
+                    placeholder="PIN do gerente"
+                    className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 pr-10 text-sm focus:border-violet-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManagerPasswordVisible((visible) => !visible)
+                    }
+                    aria-label={
+                      managerPasswordVisible
+                        ? "Ocultar senha do gerente"
+                        : "Mostrar senha do gerente"
+                    }
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400"
+                  >
+                    {managerPasswordVisible ? (
+                      <EyeOff className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <Eye className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sangriaError && (
+              <p
+                role="alert"
+                className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300"
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                {sangriaError}
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeCashOperation}
+                className="flex-1 rounded-xl border border-zinc-300 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="flex-1 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-violet-700"
+              >
+                Confirmar
+              </button>
+            </div>
+          </form>
+        </CashModalShell>
       )}
 
       {/* Área de impressão: via do cliente */}

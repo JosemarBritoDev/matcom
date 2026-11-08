@@ -77,10 +77,11 @@ const TENANT = {
   document: "12.345.678/0001-90",
 };
 
-const SELLER = {
-  name: "Ana Paula",
-  code: "0042",
-};
+const SELLERS = [
+  { name: "Ana Paula", code: "0042" },
+  { name: "Carlos", code: "0051" },
+  { name: "Bruno Lima", code: "0063" },
+] as const;
 
 const MAX_DISCOUNT = 10;
 
@@ -436,6 +437,11 @@ function QuantityControl({
 /* -------------------------------------------------------------------------- */
 
 export default function PdvPage() {
+  const [selectedSellerCode, setSelectedSellerCode] = useState<
+    (typeof SELLERS)[number]["code"]
+  >(
+    SELLERS[0].code,
+  );
   const [customerId, setCustomerId] = useState(
     () => CUSTOMERS[0]?.id ?? FALLBACK_CUSTOMER.id,
   );
@@ -466,6 +472,8 @@ export default function PdvPage() {
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     FALLBACK_CUSTOMER;
+  const selectedSeller =
+    SELLERS.find((seller) => seller.code === selectedSellerCode) ?? SELLERS[0];
 
   const isSimplified =
     selectedCustomer.registration === "CADASTRO_SIMPLIFICADO";
@@ -802,13 +810,27 @@ export default function PdvPage() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Vendedor logado
+                    Vendedor por matrícula
                   </p>
-                  <p className="truncate text-sm font-semibold">
-                    {SELLER.name}
-                  </p>
+                  <select
+                    value={selectedSellerCode}
+                    onChange={(event) =>
+                      setSelectedSellerCode(
+                        event.target.value as
+                          (typeof SELLERS)[number]["code"],
+                      )
+                    }
+                    aria-label="Selecionar vendedor"
+                    className="mt-1 w-full truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold text-zinc-900 focus:border-violet-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                  >
+                    {SELLERS.map((seller) => (
+                      <option key={seller.code} value={seller.code}>
+                        {seller.name} · {seller.code}
+                      </option>
+                    ))}
+                  </select>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Matrícula {SELLER.code}
+                    Matrícula {selectedSeller.code}
                   </p>
                 </div>
               </div>
@@ -1340,7 +1362,7 @@ export default function PdvPage() {
                       <span className="text-zinc-500 dark:text-zinc-400">
                         Vendedor
                       </span>
-                      <span className="font-semibold">{SELLER.name}</span>
+                      <span className="font-semibold">{selectedSeller.name}</span>
                     </div>
                   </div>
 
@@ -1868,7 +1890,7 @@ export default function PdvPage() {
               <strong>Data:</strong> {formatDateTime(generatedAt)}
             </p>
             <p>
-              <strong>Vendedor:</strong> {SELLER.name} ({SELLER.code})
+              <strong>Vendedor:</strong> {selectedSeller.name} ({selectedSeller.code})
             </p>
             <p>
               <strong>Cliente:</strong> {selectedCustomer.name}

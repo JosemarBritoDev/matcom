@@ -37,12 +37,9 @@ import {
 export type EmployeeRole =
   | "SUPER_ADMIN"
   | "GERENTE_LOJA"
-  | "VENDEDOR"
-  | "CAIXA"
-  | "ALMOXARIFE"
-  | "LOGISTICA"
+  | "OPERADOR_CAIXA"
   | "FINANCEIRO"
-  | "COMPRADOR";
+  | "OPERACIONAL_VENDAS";
 
 export interface TenantBranding {
   name: string;
@@ -77,12 +74,9 @@ interface MenuGroup {
 const ROLE_LABELS: Record<EmployeeRole, string> = {
   SUPER_ADMIN: "Super Admin",
   GERENTE_LOJA: "Gerente da Loja",
-  VENDEDOR: "Vendedor",
-  CAIXA: "Operador de Caixa",
-  ALMOXARIFE: "Almoxarife",
-  LOGISTICA: "Logística",
+  OPERADOR_CAIXA: "Operador de Caixa",
   FINANCEIRO: "Financeiro",
-  COMPRADOR: "Comprador",
+  OPERACIONAL_VENDAS: "Operacional de Vendas",
 };
 
 const MENU_GROUPS: MenuGroup[] = [
