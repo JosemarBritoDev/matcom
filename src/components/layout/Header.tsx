@@ -442,7 +442,7 @@ export function Header({
                 </Link>
                 {isManager && (
                   <Link
-                    href="/configuracoes"
+                    href="/configuracoes/empresa"
                     role="menuitem"
                     onClick={closeAll}
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-violet-50 hover:text-violet-700 dark:text-zinc-300 dark:hover:bg-violet-950/60 dark:hover:text-violet-300"
