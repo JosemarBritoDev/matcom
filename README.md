@@ -1,40 +1,120 @@
-# matcom
+# MatCom SaaS
 
-Loja de materiais de construção.
+**Sistema de gestão para lojas de materiais de construção — by BCTech**
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+O **MatCom** é um SaaS multi-tenant e white-label que integra o balcão (PDV), estoque com unidades fracionadas, compras, financeiro, fiscal, logística de entregas e atendimento mobile no pátio. Foi desenhado para a rotina real de lojas de materiais de construção: venda rápida, preço correto, comanda rastreável e aprovação hierárquica da tabela de atacado.
 
-## Getting Started
+---
 
-First, run the development server:
+## Resumo executivo
+
+| Pilar | Descrição |
+| --- | --- |
+| **PDV & Vendas** | Pedidos, orçamentos, clientes, produtos, tabela de preços, vendedores e relatórios |
+| **Preço inteligente** | Varejo padrão e atacado com trava de aprovação pelo Gerente |
+| **Comanda imutável** | Pedidos pagos não são editáveis; correções via estorno auditável |
+| **Dupla impressão** | Via do Cliente e Via do Galpão para separação e entrega |
+| **Estoque & Logística** | Fracionamento (caixa→m², saco→kg), saldo, romaneio e entregas |
+| **Financeiro & Fiscal** | Contas a receber/pagar, fluxo de caixa, NF-e/NFC-e e Sped |
+| **White-Label** | Nome, logotipo, mensagem e cores por loja cliente |
+| **Mobile & IA** | PWA instalável para atendimento no pátio e assistente de produtos |
+| **Temas** | Light Clean padrão no balcão e Dark Neon BCTech via toggle |
+
+### Stack
+
+Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Shadcn/UI · Lucide React · next-themes · Prisma 6.19.3 · PostgreSQL (Supabase) · Vercel
+
+---
+
+## Documentação oficial
+
+Toda a documentação técnica, operacional e arquitetural está em [`docs/`](./docs/):
+
+| Documento | Conteúdo |
+| --- | --- |
+| 📘 [CONTEXTO_IA.md](./docs/CONTEXTO_IA.md) | Arquitetura, stack, modelo de dados, regras invariantes, time de agentes de IA, regras visuais e roadmap |
+| 📗 [MANUAL_OFICIAL.md](./docs/MANUAL_OFICIAL.md) | Guia de uso para vendedores, caixas e gerentes; tabelas de preço, aprovação, caixa imutável, dupla impressão e PWA |
+| 📙 [SETUP_E_DEPLOY.md](./docs/SETUP_E_DEPLOY.md) | Desenvolvimento local no VS Code, Supabase, migrations Prisma, variáveis e deploy na Vercel |
+| 📕 [AGENTES.md](./docs/AGENTES.md) | Personas, prompts e protocolos de handoff para agentes de IA por módulo |
+
+> **Para IAs e agentes CLI:** leia `docs/CONTEXTO_IA.md` antes de qualquer alteração no código.
+
+---
+
+## Começando localmente
 
 ```bash
+# 1. Clonar
+git clone https://github.com/JosemarBritoDev/matcom.git
+cd matcom
+
+# 2. Instalar dependências
+npm install
+
+# 3. Configurar .env (DATABASE_URL e DIRECT_URL do Supabase)
+#    Veja docs/SETUP_E_DEPLOY.md
+
+# 4. Gerar o Prisma Client e aplicar migrations
+npx prisma generate
+npx prisma migrate deploy
+
+# 5. Rodar em desenvolvimento
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Comando | Função |
+| --- | --- |
+| `npm run dev` | Desenvolvimento (Turbopack) |
+| `npm run build` | Build de produção |
+| `npm run start` | Servidor de produção local |
+| `npm run lint` | ESLint |
+| `npx tsc --noEmit` | Verificação de tipos |
+| `npx prisma studio` | Interface visual do banco |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Estrutura do projeto
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+matcom/
+├── docs/                  # Documentação oficial
+├── prisma/                # Schema e migrations
+├── public/                # Assets estáticos
+├── src/
+│   ├── app/               # App Router (layout, páginas, estilos)
+│   └── components/        # Componentes de UI e layout
+└── package.json
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Regras de negócio essenciais
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Multi-tenant:** todo dado é isolado por `tenantId`.
+- **Atacado:** só é aplicado com `tierStatus = APROVADO`; aprovação exclusiva de `GERENTE_LOJA`/`SUPER_ADMIN`.
+- **Comanda imutável:** após `PAGO`, nenhum item/preço pode ser alterado.
+- **Snapshot de preço:** vendas antigas não são recalculadas.
+- **Dupla impressão:** Via do Cliente + Via do Galpão.
+- **Assinatura:** o rodapé de todas as telas exibe a assinatura BCTech.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Deploy
+
+O deploy é feito na **Vercel**, com Preview Deployments por Pull Request e Production na branch `main`. O banco PostgreSQL fica no **Supabase** (pooler para runtime, conexão direta para migrations). Passo a passo completo em [`docs/SETUP_E_DEPLOY.md`](./docs/SETUP_E_DEPLOY.md).
+
+---
+
+## Suporte
+
+**BCTech — Josemar Brito**
+WhatsApp: **11 97264-6617**
+GitHub: [JosemarBritoDev](https://github.com/JosemarBritoDev)
+
+---
+
+**Criado por BCTech | Josemar Brito | Whatsapp 11972646617**
