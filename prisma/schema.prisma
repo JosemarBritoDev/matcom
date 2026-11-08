@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  document  String   @unique
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  modules   TenantModule?
+  users     User[]
+  products  Product[]
+  orders    Order[]
+  purchases PurchaseOrder[]
+  customers Customer[]
+  suppliers Supplier[]
+}
+
+model TenantModule {
+  id          String  @id @default(uuid())
+  tenantId    String  @unique
+  vendas      Boolean @default(true)
+  caixa       Boolean @default(true)
+  compras     Boolean @default(true)
+  logistica   Boolean @default(true)
+  fiscal      Boolean @default(false)
+  iaAssistant Boolean @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+enum EmployeeRole {
+  SUPER_ADMIN
+  GERENTE_LOJA
+  VENDEDOR
+  CAIXA
+  ALMOXARIFE
+  LOGISTICA
+  FINANCEIRO
+  COMPRADOR
+}
+
+model User {
+  id        String       @id @default(uuid())
+  tenantId  String
+  name      String
+  email     String       @unique
+  password  String
+  role      EmployeeRole @default(VENDEDOR)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[] @relation("VendedorOrder")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  document  String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  document  String
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchases PurchaseOrder[]
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  tenantId        String
+  barcodeEan      String?
+  name            String
+  description     String?
+  category        String?
+  costPrice       Decimal  @db.Decimal(10, 2)
+  retailPrice     Decimal  @db.Decimal(10, 2)
+  wholesalePrice  Decimal  @db.Decimal(10, 2)
+  minWholesaleQty Decimal  @default(10)
+  primaryUnit     String   @default("UN")
+  secondaryUnit   String?
+  conversionRatio Decimal  @default(1)
+  stockQuantity   Decimal  @default(0) @db.Decimal(10, 3)
+  minStock        Decimal  @default(5)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderItems    OrderItem[]
+  purchaseItems PurchaseItem[]
+}
+
+enum OrderStatus {
+  PENDENTE
+  AGUARDANDO_CAIXA
+  PAGO
+  CANCELADO
+}
+
+enum DeliveryMode {
+  RETIRADA_IMEDIATA
+  ENTREGA_PENDENTE
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  tenantId      String
+  code          Int         @default(autoincrement())
+  sellerId      String
+  customerId    String?
+  status        OrderStatus @default(PENDENTE)
+  totalAmount   Decimal     @db.Decimal(10, 2)
+  paymentMethod String?
+  isLocked      Boolean     @default(false)
+  canceledBy    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  seller   User        @relation("VendedorOrder", fields: [sellerId], references: [id])
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+}
+
+model OrderItem {
+  id           String       @id @default(uuid())
+  orderId      String
+  productId    String
+  quantity     Decimal      @db.Decimal(10, 3)
+  unitPrice    Decimal      @db.Decimal(10, 2)
+  isWholesale  Boolean      @default(false)
+  deliveryMode DeliveryMode @default(RETIRADA_IMEDIATA)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+enum PurchaseStatus {
+  PENDENTE_AGUARDANDO_ENTREGA
+  RECEBIDO_CONFERIDO
+  CANCELADO
+}
+
+model PurchaseOrder {
+  id         String         @id @default(uuid())
+  tenantId   String
+  supplierId String
+  status     PurchaseStatus @default(PENDENTE_AGUARDANDO_ENTREGA)
+  totalCost  Decimal        @db.Decimal(10, 2)
+  invoiceXml String?
+  createdAt  DateTime       @default(now())
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier       @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+}
+
+model PurchaseItem {
+  id              String  @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Decimal @db.Decimal(10, 3)
+  costPrice       Decimal @db.Decimal(10, 2)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+}
