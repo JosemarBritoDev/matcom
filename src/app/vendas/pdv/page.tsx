@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ClipboardList,
   Clock,
+  Lock,
   Minus,
   PackageSearch,
   Plus,
@@ -21,6 +22,7 @@ import {
   Store,
   Trash2,
   Truck,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -35,13 +37,16 @@ type PricingTier = "VAREJO" | "ATACADO";
 type TierStatus = "APROVADO" | "PENDENTE" | "REJEITADO";
 type DeliveryMode = "RETIRADA_IMEDIATA" | "ENTREGA_PENDENTE";
 type ProductUnit = "m²" | "m³" | "kg" | "un" | "saco" | "caixa" | "lata";
+type CustomerRegistration = "COMPLETO" | "CADASTRO_SIMPLIFICADO";
 
 interface Customer {
   id: string;
   name: string;
   document: string;
+  phone: string;
   tier: PricingTier;
   tierStatus: TierStatus;
+  registration: CustomerRegistration;
 }
 
 interface Product {
@@ -84,29 +89,37 @@ const CUSTOMERS: Customer[] = [
     id: "cust-1",
     name: "Construtora Horizonte Ltda.",
     document: "12.345.678/0001-90",
+    phone: "(11) 3456-7890",
     tier: "ATACADO",
     tierStatus: "APROVADO",
+    registration: "COMPLETO",
   },
   {
     id: "cust-2",
     name: "Carlos Eduardo Martins",
     document: "123.456.789-00",
+    phone: "(11) 98765-4321",
     tier: "VAREJO",
     tierStatus: "APROVADO",
+    registration: "COMPLETO",
   },
   {
     id: "cust-3",
     name: "Reforma Fácil Materiais",
     document: "98.765.432/0001-10",
+    phone: "(11) 2233-4455",
     tier: "ATACADO",
     tierStatus: "PENDENTE",
+    registration: "COMPLETO",
   },
   {
     id: "cust-4",
     name: "Maria Aparecida Silva",
     document: "987.654.321-00",
+    phone: "(11) 97654-3210",
     tier: "VAREJO",
     tierStatus: "APROVADO",
+    registration: "COMPLETO",
   },
 ];
 
@@ -114,8 +127,19 @@ const FALLBACK_CUSTOMER: Customer = {
   id: "consumidor-final",
   name: "Consumidor final",
   document: "Não informado",
+  phone: "Não informado",
   tier: "VAREJO",
   tierStatus: "APROVADO",
+  registration: "COMPLETO",
+};
+
+const SIMPLIFIED_CUSTOMER_LOCK = {
+  wholesale:
+    "Tabela de Atacado exige cadastro completo e aprovação do Gerente",
+  delivery:
+    "Cadastre o endereço completo do cliente para liberar opção de entrega na obra",
+  banner:
+    "Cliente com cadastro simplificado: tabela Varejo e retirada no balcão até a conclusão do cadastro e aprovação do Gerente.",
 };
 
 const PRODUCTS: Product[] = [
@@ -271,6 +295,18 @@ function getItemTotal(item: CartItem) {
 /*                              Componentes auxiliares                        */
 /* -------------------------------------------------------------------------- */
 
+function SimplifiedCustomerBadge() {
+  return (
+    <span
+      title={SIMPLIFIED_CUSTOMER_LOCK.banner}
+      className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+    >
+      <Lock className="h-3 w-3" aria-hidden />
+      Cadastro simplificado
+    </span>
+  );
+}
+
 function CustomerTierBadge({ customer }: { customer: Customer }) {
   if (customer.tier === "VAREJO") {
     return (
@@ -309,10 +345,24 @@ function CustomerTierBadge({ customer }: { customer: Customer }) {
 function ItemTierToggle({
   tier,
   onToggle,
+  disabled = false,
 }: {
   tier: PricingTier;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <span
+        title={SIMPLIFIED_CUSTOMER_LOCK.wholesale}
+        className="inline-flex cursor-not-allowed items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+      >
+        <Lock className="h-3 w-3" aria-hidden />
+        Varejo
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -389,6 +439,16 @@ export default function PdvPage() {
   const [customerId, setCustomerId] = useState(
     () => CUSTOMERS[0]?.id ?? FALLBACK_CUSTOMER.id,
   );
+  const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    document: "",
+    phone: "",
+  });
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(
+    null,
+  );
   const [draftCode, setDraftCode] = useState(1051);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -404,10 +464,14 @@ export default function PdvPage() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const selectedCustomer =
-    CUSTOMERS.find((customer) => customer.id === customerId) ??
+    customers.find((customer) => customer.id === customerId) ??
     FALLBACK_CUSTOMER;
 
+  const isSimplified =
+    selectedCustomer.registration === "CADASTRO_SIMPLIFICADO";
+
   const defaultTier: PricingTier =
+    !isSimplified &&
     selectedCustomer.tier === "ATACADO" &&
     selectedCustomer.tierStatus === "APROVADO"
       ? "ATACADO"
@@ -488,6 +552,34 @@ export default function PdvPage() {
     };
   }, [modalOpen]);
 
+  useEffect(() => {
+    if (!newCustomerOpen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setNewCustomerOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [newCustomerOpen]);
+
+  useEffect(() => {
+    if (isSimplified && deliveryMode !== "RETIRADA_IMEDIATA") {
+      setDeliveryMode("RETIRADA_IMEDIATA");
+    }
+  }, [isSimplified, deliveryMode]);
+
   function addProduct(product: Product) {
     setCart((currentCart) => {
       const existingItem = currentCart.find(
@@ -537,6 +629,10 @@ export default function PdvPage() {
   }
 
   function toggleItemTier(productId: string) {
+    if (isSimplified) {
+      return;
+    }
+
     setCart((currentCart) =>
       currentCart.map((item) =>
         item.product.id === productId
@@ -550,8 +646,10 @@ export default function PdvPage() {
   }
 
   function applyTierToAll(tier: PricingTier) {
+    const safeTier: PricingTier = isSimplified ? "VAREJO" : tier;
+
     setCart((currentCart) =>
-      currentCart.map((item) => ({ ...item, tier })),
+      currentCart.map((item) => ({ ...item, tier: safeTier })),
     );
   }
 
@@ -581,6 +679,92 @@ export default function PdvPage() {
     setSearch("");
     setSearchOpen(false);
     setDraftCode((currentCode) => currentCode + 1);
+  }
+
+  function selectCustomer(nextCustomer: Customer) {
+    setCustomerId(nextCustomer.id);
+
+    const nextTier: PricingTier =
+      nextCustomer.registration === "CADASTRO_SIMPLIFICADO" ||
+      !(
+        nextCustomer.tier === "ATACADO" &&
+        nextCustomer.tierStatus === "APROVADO"
+      )
+        ? "VAREJO"
+        : "ATACADO";
+
+    setCart((currentCart) =>
+      currentCart.map((item) => ({ ...item, tier: nextTier })),
+    );
+
+    if (nextCustomer.registration === "CADASTRO_SIMPLIFICADO") {
+      setDeliveryMode("RETIRADA_IMEDIATA");
+    }
+  }
+
+  function openNewCustomerModal() {
+    setNewCustomer({ name: "", document: "", phone: "" });
+    setNewCustomerError(null);
+    setNewCustomerOpen(true);
+  }
+
+  function handleCreateCustomer() {
+    const name = newCustomer.name.trim();
+    const document = newCustomer.document.trim();
+    const phone = newCustomer.phone.trim();
+    const documentDigits = document.replace(/\D/g, "");
+    const phoneDigits = phone.replace(/\D/g, "");
+
+    if (name.length < 3) {
+      setNewCustomerError("Informe o nome completo do cliente.");
+      return;
+    }
+
+    if (documentDigits.length !== 11 && documentDigits.length !== 14) {
+      setNewCustomerError(
+        "Informe um CPF com 11 dígitos ou um CNPJ com 14 dígitos.",
+      );
+      return;
+    }
+
+    if (phoneDigits.length < 10) {
+      setNewCustomerError(
+        "Informe o telefone com DDD (mínimo de 10 dígitos).",
+      );
+      return;
+    }
+
+    if (
+      customers.some(
+        (customer) =>
+          customer.document.replace(/\D/g, "") === documentDigits,
+      )
+    ) {
+      setNewCustomerError(
+        "Já existe um cliente cadastrado com este CPF/CNPJ.",
+      );
+      return;
+    }
+
+    const created: Customer = {
+      id: `cust-simplificado-${Date.now()}`,
+      name,
+      document,
+      phone,
+      tier: "VAREJO",
+      tierStatus: "APROVADO",
+      registration: "CADASTRO_SIMPLIFICADO",
+    };
+
+    setCustomers((currentCustomers) => [...currentCustomers, created]);
+    setCustomerId(created.id);
+    setCart((currentCart) =>
+      currentCart.map((item) => ({ ...item, tier: "VAREJO" })),
+    );
+    setDeliveryMode("RETIRADA_IMEDIATA");
+    setNewCustomer({ name: "", document: "", phone: "" });
+    setNewCustomerError(null);
+    setNewCustomerOpen(false);
   }
 
   return (
@@ -631,55 +815,58 @@ export default function PdvPage() {
 
               {/* Cliente */}
               <div className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-1">
                   <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     <Users className="h-3 w-3" aria-hidden />
                     Cliente
                   </p>
-                  <CustomerTierBadge customer={selectedCustomer} />
+                  <span className="flex flex-wrap items-center justify-end gap-1">
+                    <CustomerTierBadge customer={selectedCustomer} />
+                    {isSimplified && <SimplifiedCustomerBadge />}
+                  </span>
                 </div>
 
-                <div className="relative mt-1.5">
-                  <select
-                    value={customerId}
-                    onChange={(event) => {
-                      const nextCustomer =
-                        CUSTOMERS.find(
-                          (customer) => customer.id === event.target.value,
-                        ) ?? FALLBACK_CUSTOMER;
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <div className="relative min-w-0 flex-1">
+                    <select
+                      value={customerId}
+                      onChange={(event) => {
+                        const nextCustomer =
+                          customers.find(
+                            (customer) =>
+                              customer.id === event.target.value,
+                          ) ?? FALLBACK_CUSTOMER;
 
-                      setCustomerId(nextCustomer.id);
+                        selectCustomer(nextCustomer);
+                      }}
+                      aria-label="Selecionar cliente da comanda"
+                      className="w-full appearance-none rounded-lg border border-zinc-300 bg-white py-1.5 pl-2 pr-8 text-sm font-medium text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                    >
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                      aria-hidden
+                    />
+                  </div>
 
-                      const nextTier: PricingTier =
-                        nextCustomer.tier === "ATACADO" &&
-                        nextCustomer.tierStatus === "APROVADO"
-                          ? "ATACADO"
-                          : "VAREJO";
-
-                      setCart((currentCart) =>
-                        currentCart.map((item) => ({
-                          ...item,
-                          tier: nextTier,
-                        })),
-                      );
-                    }}
-                    aria-label="Selecionar cliente da comanda"
-                    className="w-full appearance-none rounded-lg border border-zinc-300 bg-white py-1.5 pl-2 pr-8 text-sm font-medium text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                  <button
+                    type="button"
+                    onClick={openNewCustomerModal}
+                    title="Cadastrar novo cliente na comanda"
+                    className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 transition-colors hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300 dark:hover:bg-violet-900/60"
                   >
-                    {CUSTOMERS.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
-                    aria-hidden
-                  />
+                    <Plus className="h-3 w-3" aria-hidden />
+                    Novo cliente
+                  </button>
                 </div>
 
                 <p className="mt-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {selectedCustomer.document}
+                  {selectedCustomer.document} · {selectedCustomer.phone}
                 </p>
               </div>
 
@@ -701,6 +888,13 @@ export default function PdvPage() {
                 </div>
               </div>
             </div>
+
+            {isSimplified && (
+              <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>{SIMPLIFIED_CUSTOMER_LOCK.banner}</span>
+              </p>
+            )}
           </section>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_370px] xl:items-start xl:gap-6">
@@ -881,15 +1075,33 @@ export default function PdvPage() {
                       <button
                         type="button"
                         onClick={() => applyTierToAll("ATACADO")}
+                        disabled={isSimplified}
+                        title={
+                          isSimplified
+                            ? SIMPLIFIED_CUSTOMER_LOCK.wholesale
+                            : "Aplicar Atacado avulso a todos os itens"
+                        }
                         className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                          allAtacado
-                            ? "bg-violet-600 text-white shadow-sm"
-                            : "text-zinc-500 hover:text-violet-700 dark:text-zinc-400 dark:hover:text-violet-300"
+                          isSimplified
+                            ? "cursor-not-allowed text-zinc-400 opacity-50 dark:text-zinc-600"
+                            : allAtacado
+                              ? "bg-violet-600 text-white shadow-sm"
+                              : "text-zinc-500 hover:text-violet-700 dark:text-zinc-400 dark:hover:text-violet-300"
                         }`}
                       >
                         Atacado avulso
                       </button>
                     </div>
+
+                    {isSimplified && (
+                      <p className="flex w-full items-start gap-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                        <Lock
+                          className="mt-0.5 h-3 w-3 shrink-0"
+                          aria-hidden
+                        />
+                        {SIMPLIFIED_CUSTOMER_LOCK.wholesale}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -995,6 +1207,7 @@ export default function PdvPage() {
                               <td className="px-4 py-3">
                                 <ItemTierToggle
                                   tier={item.tier}
+                                  disabled={isSimplified}
                                   onToggle={() =>
                                     toggleItemTier(item.product.id)
                                   }
@@ -1065,6 +1278,7 @@ export default function PdvPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <ItemTierToggle
                               tier={item.tier}
+                              disabled={isSimplified}
                               onToggle={() => toggleItemTier(item.product.id)}
                             />
                             <QuantityControl
@@ -1117,7 +1331,10 @@ export default function PdvPage() {
                       <span className="text-zinc-500 dark:text-zinc-400">
                         Tabela
                       </span>
-                      <CustomerTierBadge customer={selectedCustomer} />
+                      <span className="flex flex-wrap items-center justify-end gap-1">
+                        <CustomerTierBadge customer={selectedCustomer} />
+                        {isSimplified && <SimplifiedCustomerBadge />}
+                      </span>
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
                       <span className="text-zinc-500 dark:text-zinc-400">
@@ -1253,17 +1470,35 @@ export default function PdvPage() {
                       <button
                         type="button"
                         onClick={() => setDeliveryMode("ENTREGA_PENDENTE")}
+                        disabled={isSimplified}
                         aria-pressed={deliveryMode === "ENTREGA_PENDENTE"}
+                        title={
+                          isSimplified
+                            ? SIMPLIFIED_CUSTOMER_LOCK.delivery
+                            : "Enviar comanda para entrega na obra"
+                        }
                         className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          deliveryMode === "ENTREGA_PENDENTE"
-                            ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300"
-                            : "border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                          isSimplified
+                            ? "cursor-not-allowed border-zinc-200 text-zinc-400 opacity-50 dark:border-zinc-800 dark:text-zinc-600"
+                            : deliveryMode === "ENTREGA_PENDENTE"
+                              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300"
+                              : "border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
                         }`}
                       >
                         <Truck className="h-3.5 w-3.5" aria-hidden />
                         Entrega
                       </button>
                     </div>
+
+                    {isSimplified && (
+                      <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                        <Lock
+                          className="mt-0.5 h-3 w-3 shrink-0"
+                          aria-hidden
+                        />
+                        {SIMPLIFIED_CUSTOMER_LOCK.delivery}
+                      </p>
+                    )}
                   </div>
 
                   {/* Observações */}
@@ -1315,6 +1550,178 @@ export default function PdvPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de cadastro rápido de cliente */}
+      {newCustomerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-customer-title"
+          className="fixed inset-0 z-[75] flex items-end justify-center bg-zinc-950/60 p-4 backdrop-blur-sm print:hidden sm:items-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setNewCustomerOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-start justify-between gap-3 border-b border-zinc-200 p-5 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                  <UserPlus className="h-5 w-5" aria-hidden />
+                </span>
+                <div>
+                  <h2
+                    id="new-customer-title"
+                    className="text-base font-bold tracking-tight"
+                  >
+                    Novo cliente
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Cadastro rápido para a comanda atual
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setNewCustomerOpen(false)}
+                aria-label="Fechar modal de novo cliente"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateCustomer();
+              }}
+            >
+              <div className="space-y-3 p-5">
+                <div>
+                  <label
+                    htmlFor="new-customer-name"
+                    className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                  >
+                    Nome completo
+                  </label>
+                  <input
+                    id="new-customer-name"
+                    type="text"
+                    autoFocus
+                    required
+                    value={newCustomer.name}
+                    onChange={(event) => {
+                      setNewCustomer((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }));
+                      setNewCustomerError(null);
+                    }}
+                    placeholder="Ex.: João da Silva"
+                    className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="new-customer-document"
+                      className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                    >
+                      CPF / CNPJ
+                    </label>
+                    <input
+                      id="new-customer-document"
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      value={newCustomer.document}
+                      onChange={(event) => {
+                        setNewCustomer((current) => ({
+                          ...current,
+                          document: event.target.value,
+                        }));
+                        setNewCustomerError(null);
+                      }}
+                      placeholder="000.000.000-00"
+                      className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="new-customer-phone"
+                      className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                    >
+                      Telefone
+                    </label>
+                    <input
+                      id="new-customer-phone"
+                      type="tel"
+                      inputMode="tel"
+                      required
+                      value={newCustomer.phone}
+                      onChange={(event) => {
+                        setNewCustomer((current) => ({
+                          ...current,
+                          phone: event.target.value,
+                        }));
+                        setNewCustomerError(null);
+                      }}
+                      placeholder="(11) 90000-0000"
+                      className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    O cliente será criado como{" "}
+                    <strong>CADASTRO_SIMPLIFICADO</strong>: apenas tabela
+                    Varejo e retirada no balcão. Atacado e entrega na obra
+                    exigem cadastro completo e aprovação do Gerente.
+                  </span>
+                </p>
+
+                {newCustomerError && (
+                  <p
+                    role="alert"
+                    className="flex items-start gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                  >
+                    <XCircle
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    {newCustomerError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-zinc-200 p-5 sm:flex-row dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setNewCustomerOpen(false)}
+                  className="inline-flex flex-1 items-center justify-center rounded-xl border border-zinc-300 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-violet-600/20 transition-colors hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                >
+                  <UserPlus className="h-4 w-4" aria-hidden />
+                  Cadastrar cliente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmação */}
       {modalOpen && generatedAt && (
