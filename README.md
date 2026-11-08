@@ -64,6 +64,31 @@ npm run dev
 
 Acesse <http://localhost:3000>.
 
+---
+
+## Mapa completo de navegação e rotas
+
+### Acesso local e em produção
+
+| Módulo | Perfil / role | Função | Local | Produção |
+| --- | --- | --- | --- | --- |
+| Pré-Venda & Balcão | `OPERACIONAL_VENDAS` / Vendedor | Atendimento rápido, produtos, cliente simplificado em Varejo/Retirada e comanda | [Abrir PDV](http://localhost:3000/vendas/pdv) | [Abrir PDV](https://matcom.vercel.app/vendas/pdv) |
+| Fila do Caixa | `OPERADOR_CAIXA` | Pagamento, troco, PIX, cartão, crediário, dupla impressão e sangria auditada | [Abrir Caixa](http://localhost:3000/caixa/fila) | [Abrir Caixa](https://matcom.vercel.app/caixa/fila) |
+| Aprovações | `GERENTE_LOJA`, `SUPER_ADMIN` | Atacado, descontos, crediário e estornos com trava antifraude | [Abrir Aprovações](http://localhost:3000/gerencia/aprovacoes) | [Abrir Aprovações](https://matcom.vercel.app/gerencia/aprovacoes) |
+| Clientes & Crédito | Administrativo / Vendas / `GERENTE_LOJA` | Cadastro completo, endereço, limite de crediário e promoção ao Atacado | [Abrir Clientes](http://localhost:3000/vendas/clientes) | [Abrir Clientes](https://matcom.vercel.app/vendas/clientes) |
+| NF-e & Compras | Estoque / Suprimentos / `FINANCEIRO` | XML, De-Para, fracionamento, custo médio e entrada fiscal | [Abrir Compras NF-e](http://localhost:3000/compras/nfe) | [Abrir Compras NF-e](https://matcom.vercel.app/compras/nfe) |
+| Financeiro & DRE | `FINANCEIRO`, Diretoria, `GERENTE_LOJA`, `SUPER_ADMIN` | Contas a pagar/receber, liquidação, COGS, margem e lucro líquido | [Abrir Financeiro](http://localhost:3000/financeiro/contas) | [Abrir Financeiro](https://matcom.vercel.app/financeiro/contas) |
+
+### Links rápidos locais
+
+- [PDV Balcão](http://localhost:3000/vendas/pdv)
+- [Fila do Caixa](http://localhost:3000/caixa/fila)
+- [Central de Aprovações](http://localhost:3000/gerencia/aprovacoes)
+- [Gestão de Clientes](http://localhost:3000/vendas/clientes)
+- [Entrada de NF-e](http://localhost:3000/compras/nfe)
+- [Contas & DRE](http://localhost:3000/financeiro/contas)
+- [Prisma Studio](http://localhost:5555) — `npx prisma studio`
+
 ### Scripts
 
 | Comando | Função |

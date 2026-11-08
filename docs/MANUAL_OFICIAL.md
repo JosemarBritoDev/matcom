@@ -20,8 +20,9 @@ Versão do documento: 1.0 — 08/11/2026
 8. [Módulo PWA / Mobile — Atendimento no Pátio](#8-módulo-pwa--mobile--atendimento-no-pátio)
 9. [Compras, estoque e logística](#9-compras-estoque-e-logística)
 10. [Financeiro e fiscal](#10-financeiro-e-fiscal)
-11. [Perguntas frequentes](#11-perguntas-frequentes)
-12. [Suporte](#12-suporte)
+11. [Mapa completo de navegação e rotas](#11-mapa-completo-de-navegação-e-rotas)
+12. [Perguntas frequentes](#12-perguntas-frequentes)
+13. [Suporte](#13-suporte)
 
 ---
 
@@ -343,6 +344,39 @@ O MatCom pode ser instalado no celular ou tablet como aplicativo (PWA), permitin
 
 - Visão consolidada de entradas e saídas.
 - Conciliado com fechamentos de caixa.
+
+---
+
+## 11. Mapa completo de navegação e rotas
+
+### 11.1 Ambientes de acesso
+
+- **Local:** `http://localhost:3000`
+- **Produção:** `https://matcom.vercel.app`
+- **Auditoria do banco de dados:** execute `npx prisma studio` e acesse `http://localhost:5555`.
+
+Os links abaixo usam a rota relativa do MatCom. Em produção, substitua `http://localhost:3000` pela URL de produção configurada no ambiente da loja ou pelo domínio oficial informado pela BCTech.
+
+### 11.2 Mapa operacional por módulo
+
+| Módulo | Perfil / role autorizado | Função operacional | Acesso local | Acesso em produção |
+| --- | --- | --- | --- | --- |
+| Pré-Venda & Balcão | `OPERACIONAL_VENDAS` (Vendedor) | Atendimento rápido, bipe de produtos, seleção de cliente, cadastro simplificado apenas em Varejo/Retirada e geração de comanda | [http://localhost:3000/vendas/pdv](http://localhost:3000/vendas/pdv) | [https://matcom.vercel.app/vendas/pdv](https://matcom.vercel.app/vendas/pdv) |
+| Fila do Caixa & Financeiro | `OPERADOR_CAIXA` | Receber comandas, liquidar por PIX, Dinheiro, Cartão ou Crediário, calcular troco, imprimir vias do Cliente/Galpão e realizar sangria auditada por senha de gerente | [http://localhost:3000/caixa/fila](http://localhost:3000/caixa/fila) | [https://matcom.vercel.app/caixa/fila](https://matcom.vercel.app/caixa/fila) |
+| Aprovações Hierárquicas | `GERENTE_LOJA`, `SUPER_ADMIN` | Aprovar/rejeitar Atacado, descontos acima de 10%, limite de crediário e estornos, com bloqueio da aprovação da própria solicitação | [http://localhost:3000/gerencia/aprovacoes](http://localhost:3000/gerencia/aprovacoes) | [https://matcom.vercel.app/gerencia/aprovacoes](https://matcom.vercel.app/gerencia/aprovacoes) |
+| Gestão de Clientes & Crédito | `OPERACIONAL_VENDAS`, Administrativo, `GERENTE_LOJA` | Cadastrar e editar clientes, concluir endereço para entrega, analisar crediário e solicitar aprovação de perfil Atacado | [http://localhost:3000/vendas/clientes](http://localhost:3000/vendas/clientes) | [https://matcom.vercel.app/vendas/clientes](https://matcom.vercel.app/vendas/clientes) |
+| Entrada de NF-e & Compras | Estoque / Suprimentos, `FINANCEIRO`, `GERENTE_LOJA` | Importar XML de fornecedores, realizar De-Para, converter palete/caixa em sacos/unidades, recalcular custo médio e lançar estoque | [http://localhost:3000/compras/nfe](http://localhost:3000/compras/nfe) | [https://matcom.vercel.app/compras/nfe](https://matcom.vercel.app/compras/nfe) |
+| Financeiro & DRE Gerencial | `FINANCEIRO`, Diretoria, `GERENTE_LOJA`, `SUPER_ADMIN` | Controlar contas de NF-e/despesas, títulos de crediário/cartões, liquidações, fluxo e DRE simplificada | [http://localhost:3000/financeiro/contas](http://localhost:3000/financeiro/contas) | [https://matcom.vercel.app/financeiro/contas](https://matcom.vercel.app/financeiro/contas) |
+
+### 11.3 Links rápidos para navegação local
+
+- [PDV — Pré-venda de balcão](http://localhost:3000/vendas/pdv)
+- [Fila do Caixa](http://localhost:3000/caixa/fila)
+- [Aprovações do Gerente](http://localhost:3000/gerencia/aprovacoes)
+- [Gestão de Clientes](http://localhost:3000/vendas/clientes)
+- [Entrada de NF-e e Compras](http://localhost:3000/compras/nfe)
+- [Contas e DRE Financeiro](http://localhost:3000/financeiro/contas)
+- [Prisma Studio — Auditoria do Banco](http://localhost:5555)
 - Use para decisões de compra e concessão de atacado.
 
 ### 10.4 Fiscal
