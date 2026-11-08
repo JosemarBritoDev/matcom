@@ -2,11 +2,9 @@ import {
   ArrowRight,
   Boxes,
   FileText,
-  Hammer,
   LogIn,
   ShoppingCart,
   Sparkles,
-  Store,
   Truck,
   Wallet,
 } from "lucide-react";
@@ -46,29 +44,8 @@ const modules = [
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
-              <Hammer className="h-5 w-5" aria-hidden />
-            </span>
-            <div className="leading-tight">
-              <p className="text-base font-bold tracking-tight">Matcom</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Materiais de construção
-              </p>
-            </div>
-          </div>
-
-          <span className="hidden items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 sm:flex dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-            <Store className="h-3.5 w-3.5" aria-hidden />
-            Em construção
-          </span>
-        </div>
-      </header>
-
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-14 px-6 py-16">
+    <div className="flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <main className="mx-auto flex w-full max-w-6xl flex-col justify-center gap-14 px-6 py-16">
         <section className="flex flex-col items-start gap-6">
           <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             Sistema de gestão para loja de materiais de construção
@@ -136,12 +113,6 @@ export default function Home() {
           </ul>
         </section>
       </main>
-
-      <footer className="border-t border-zinc-200 bg-white px-6 py-6 dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-          Criado por BCTech | Josemar Brito | Whatsapp 11972646617
-        </p>
-      </footer>
     </div>
   );
 }
