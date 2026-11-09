@@ -7,6 +7,14 @@
 
 export const IMAGEM_FALLBACK_PRODUTO = "/products/produto.svg";
 
+export interface ProdutoComImagem {
+  imageUrl?: string | null;
+  imagemUrl?: string | null;
+  description?: string | null;
+  descricao?: string | null;
+  name?: string | null;
+}
+
 interface RegraImagemProduto {
   termos: readonly string[];
   imagem: string;
@@ -74,4 +82,57 @@ export function imagemDoProduto(descricao: string): string {
   );
 
   return regra?.imagem ?? IMAGEM_FALLBACK_PRODUTO;
+}
+
+function urlImagemSegura(valor: string | null | undefined): string | null {
+  const url = valor?.trim();
+
+  if (!url) {
+    return null;
+  }
+
+  if (
+    url.startsWith("/") &&
+    !url.startsWith("//") &&
+    !url.includes("\\") &&
+    !/[\u0000-\u001f]/.test(url)
+  ) {
+    return url;
+  }
+
+  if (/^blob:https?:\/\/\S+$/i.test(url)) {
+    return url;
+  }
+
+  if (
+    /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,[a-z\d+/]+=*$/i.test(url)
+  ) {
+    return url;
+  }
+
+  try {
+    const origem = new URL(url);
+    return origem.protocol === "https:" || origem.protocol === "http:"
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a imagem independente do nome usado pelo Prisma ou pelas telas.
+ * URLs inválidas usam o thumbnail local correspondente à descrição do produto.
+ */
+export function obterUrlImagemProduto(produto: ProdutoComImagem): string {
+  const url =
+    urlImagemSegura(produto.imageUrl) ?? urlImagemSegura(produto.imagemUrl);
+
+  if (url) {
+    return url;
+  }
+
+  return imagemDoProduto(
+    produto.description ?? produto.descricao ?? produto.name ?? "",
+  );
 }

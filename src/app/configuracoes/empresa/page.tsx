@@ -19,6 +19,13 @@ import {
   X,
 } from "lucide-react";
 
+import {
+  podeAdicionarUsuario,
+  PLANOS,
+  type PlanoTenant,
+  type ValidacaoLimiteUsuarios,
+} from "@/lib/permissions";
+
 type SettingsTab = "empresa" | "usuarios" | "regras";
 type EmployeeRole =
   | "GERENTE_LOJA"
@@ -87,6 +94,7 @@ const EMPTY_USER: Omit<TeamUser, "id"> = {
 };
 
 export default function ConfiguracoesEmpresaPage() {
+  const planoContratado: PlanoTenant = "PRO";
   const [activeTab, setActiveTab] = useState<SettingsTab>("empresa");
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<TeamUser[]>(INITIAL_USERS);
@@ -100,6 +108,8 @@ export default function ConfiguracoesEmpresaPage() {
   const [quoteValidity, setQuoteValidity] = useState("15");
   const [requireCpfNfce, setRequireCpfNfce] = useState(true);
   const [cashDrawerLimit, setCashDrawerLimit] = useState("5000");
+  const [upgradeSolicitado, setUpgradeSolicitado] =
+    useState<ValidacaoLimiteUsuarios | null>(null);
 
   const filteredUsers = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -118,6 +128,13 @@ export default function ConfiguracoesEmpresaPage() {
   }
 
   function openNewUser() {
+    const limite = podeAdicionarUsuario(planoContratado, users.length);
+
+    if (!limite.permitido) {
+      setUpgradeSolicitado(limite);
+      return;
+    }
+
     setEditingUser({ ...EMPTY_USER });
     setTemporaryPassword("");
     setApprovalPin("");
@@ -145,6 +162,14 @@ export default function ConfiguracoesEmpresaPage() {
       );
       showToast("Permissões do usuário atualizadas.");
     } else {
+      const limite = podeAdicionarUsuario(planoContratado, users.length);
+
+      if (!limite.permitido) {
+        setEditingUser(null);
+        setUpgradeSolicitado(limite);
+        return;
+      }
+
       setUsers((current) => [
         ...current,
         {
@@ -210,9 +235,13 @@ export default function ConfiguracoesEmpresaPage() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
                   Plano contratado
                 </p>
-                <h2 className="mt-1 text-lg font-bold">Plano MatCom PRO - Ativo</h2>
+                <h2 className="mt-1 text-lg font-bold">
+                  Plano MatCom {PLANOS[planoContratado].nome} - Ativo
+                </h2>
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  4 de 20 usuários e 2 de 8 terminais em uso
+                  {users.length} de{" "}
+                  {PLANOS[planoContratado].limiteUsuarios ?? "ilimitado"}{" "}
+                  usuários em uso
                 </p>
               </div>
             </div>
@@ -403,6 +432,52 @@ export default function ConfiguracoesEmpresaPage() {
                 <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700"><Save className="h-4 w-4" /> Salvar usuário</button>
               </div>
             </form>
+          </div>
+        )}
+
+        {upgradeSolicitado && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center bg-zinc-950/60 p-4 backdrop-blur-sm">
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="upgrade-title"
+              className="w-full max-w-md rounded-2xl border border-violet-200 bg-white p-6 shadow-2xl dark:border-violet-900 dark:bg-zinc-900"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                <Users className="h-6 w-6" aria-hidden />
+              </div>
+              <h2 id="upgrade-title" className="mt-4 text-lg font-bold">
+                Amplie sua equipe com o plano{" "}
+                {upgradeSolicitado.planoSugerido
+                  ? PLANOS[upgradeSolicitado.planoSugerido].nome
+                  : "BCTech"}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                {upgradeSolicitado.motivo}
+              </p>
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                Fale com a BCTech para liberar novos acessos para sua loja.
+              </p>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUpgradeSolicitado(null)}
+                  className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-bold dark:border-zinc-700"
+                >
+                  Agora não
+                </button>
+                <a
+                  href={`https://wa.me/5511972646617?text=${encodeURIComponent(
+                    `Olá, gostaria de fazer upgrade para o plano ${upgradeSolicitado.planoSugerido ? PLANOS[upgradeSolicitado.planoSugerido].nome : "BCTech"}.`,
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700"
+                >
+                  Falar com a BCTech
+                </a>
+              </div>
+            </section>
           </div>
         )}
 

@@ -28,7 +28,7 @@ import {
   type ResultadoEstoqueDinamico,
   type StatusEstoque,
 } from "@/lib/estoque-dinamico";
-import { imagemDoProduto } from "@/lib/product-images";
+import { obterUrlImagemProduto } from "@/lib/product-images";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Tipos                                    */
@@ -343,7 +343,7 @@ const PRODUTOS: ProdutoCompra[] = [
 
 const PRODUTOS_CALCULADOS: ProdutoCalculado[] = PRODUTOS.map((produto) => ({
   ...produto,
-  imagemUrl: imagemDoProduto(produto.descricao),
+  imagemUrl: obterUrlImagemProduto({ descricao: produto.descricao }),
   calculo: calcularEstoqueMinimoDinamico({
     vendaMediaDiaria: produto.vendaMediaDiaria,
     tempoReposicaoDias: produto.tempoReposicaoDias,
@@ -932,12 +932,21 @@ export default function SugestaoCompraPage() {
                         </td>
 
                         <td className="px-4 py-3">
-                          <p className="max-w-[250px] text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                            {produto.descricao}
-                          </p>
-                          <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
-                            {fornecedor.nome} · {produto.unidade}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={produto.imagemUrl}
+                              alt=""
+                              className="h-11 w-11 shrink-0 rounded-lg border border-zinc-200 bg-white object-contain p-1 dark:border-zinc-700 dark:bg-zinc-950"
+                            />
+                            <div>
+                              <p className="max-w-[250px] text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                                {produto.descricao}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                {fornecedor.nome} · {produto.unidade}
+                              </p>
+                            </div>
+                          </div>
                         </td>
 
                         <td className="px-4 py-3 text-center">

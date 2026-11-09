@@ -33,8 +33,6 @@ export interface OpcoesProcessamentoImagem {
   qualidadeInicial?: number;
   /** Qualidade WebP mínima antes de reduzir dimensões. Padrão: 0.35. */
   qualidadeMinima?: number;
-  /** Formato de saída. O padrão do produto é WebP. */
-  mimeType?: string;
 }
 
 export interface ImagemProcessada {
@@ -86,7 +84,10 @@ export function calcularDimensoesRedimensionadas(
 
   const larguraSegura = Math.max(1, Math.round(largura));
   const alturaSegura = Math.max(1, Math.round(altura));
-  const limite = Math.max(1, Math.round(dimensaoMaxima));
+  const limite = Math.max(
+    1,
+    Math.min(DIMENSAO_MAXIMA_IMAGEM, Math.round(dimensaoMaxima)),
+  );
   const maiorLado = Math.max(larguraSegura, alturaSegura);
 
   if (maiorLado <= limite) {
@@ -235,6 +236,15 @@ function canvasParaBlob(
           return;
         }
 
+        if (blob.type !== mimeType) {
+          reject(
+            new Error(
+              "Este navegador não conseguiu gerar uma imagem WebP. Atualize o navegador e tente novamente.",
+            ),
+          );
+          return;
+        }
+
         resolve(blob);
       },
       mimeType,
@@ -304,10 +314,13 @@ export async function processarImagem(
 
   const dimensaoMaxima = Math.max(
     1,
-    Math.floor(opcoes.dimensaoMaxima ?? DIMENSAO_MAXIMA_IMAGEM),
+    Math.min(
+      DIMENSAO_MAXIMA_IMAGEM,
+      Math.floor(opcoes.dimensaoMaxima ?? DIMENSAO_MAXIMA_IMAGEM),
+    ),
   );
   const alvoBytes = Math.max(1024, Math.floor(opcoes.alvoBytes ?? ALVO_BYTES_WEBP));
-  const mimeType = opcoes.mimeType ?? "image/webp";
+  const mimeType = "image/webp";
   const qualidadeMaxima = limitar(opcoes.qualidadeInicial ?? QUALIDADE_WEBP_INICIAL, 0.1, 1);
   const qualidadeMinima = limitar(
     opcoes.qualidadeMinima ?? QUALIDADE_WEBP_MINIMA,
@@ -397,7 +410,7 @@ export async function processarImagem(
       altura,
       bytes: blob.size,
       bytesOriginais,
-      mimeType: blob.type || mimeType,
+      mimeType: blob.type,
       qualidade,
       redimensionada:
         largura !== fonte.largura || altura !== fonte.altura,
