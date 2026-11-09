@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Building2,
   Check,
@@ -15,72 +15,55 @@ import {
 import {
   alternarFeatureFlag,
   DESCRICOES_FEATURE_FLAGS,
-  FEATURE_FLAGS_PADRAO,
   FEATURE_FLAGS_TENANT,
   formatarLimiteUsuarios,
   PLANOS,
   PLANOS_TENANT,
-  resolverFeatureFlags,
   ROTULOS_FEATURE_FLAGS,
   type FeatureFlagTenant,
   type PlanoTenant,
-  type TenantFeatureFlags,
 } from "@/lib/permissions";
-
-type StatusTenant = "ATIVO" | "SUSPENSO";
-
-interface TenantAdministrado {
-  id: string;
-  nome: string;
-  cnpj: string;
-  plano: PlanoTenant;
-  status: StatusTenant;
-  featureFlags: TenantFeatureFlags;
-}
-
-const TENANTS_DEMONSTRACAO: TenantAdministrado[] = [
-  {
-    id: "tenant-matcom",
-    nome: "MatCom Materiais",
-    cnpj: "12.345.678/0001-90",
-    plano: "PRO",
-    status: "ATIVO",
-    featureFlags: resolverFeatureFlags(FEATURE_FLAGS_PADRAO),
-  },
-  {
-    id: "tenant-casa-nova",
-    nome: "Casa Nova Construções",
-    cnpj: "45.678.901/0001-23",
-    plano: "START",
-    status: "ATIVO",
-    featureFlags: {
-      ...FEATURE_FLAGS_PADRAO,
-      emissaoFiscalSefaz: false,
-    },
-  },
-  {
-    id: "tenant-deposito-central",
-    nome: "Depósito Central",
-    cnpj: "98.765.432/0001-10",
-    plano: "FREE",
-    status: "SUSPENSO",
-    featureFlags: {
-      ...FEATURE_FLAGS_PADRAO,
-      expedicao: false,
-      emissaoFiscalSefaz: false,
-    },
-  },
-];
+import {
+  carregarTenantsMock,
+  salvarTenantsMock,
+  TENANTS_DEMONSTRACAO,
+  type TenantAdministradoMock,
+  type StatusTenantMock,
+} from "@/lib/tenant-admin-mock";
+import {
+  podeAdministrarSaas,
+  resolverSessaoAtiva,
+} from "@/lib/session";
 
 const campoClassName =
   "mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-violet-500 dark:border-zinc-700 dark:bg-zinc-950";
 
 export default function AdminPage() {
-  const [tenants, setTenants] = useState(TENANTS_DEMONSTRACAO);
+  const sessao = resolverSessaoAtiva();
+  const acessoAdmin = podeAdministrarSaas(sessao);
+  const [tenants, setTenants] = useState<TenantAdministradoMock[]>(
+    TENANTS_DEMONSTRACAO,
+  );
   const [busca, setBusca] = useState("");
   const [tenantEditando, setTenantEditando] =
-    useState<TenantAdministrado | null>(null);
+    useState<TenantAdministradoMock | null>(null);
   const [aviso, setAviso] = useState("");
+
+  useEffect(() => {
+    if (!acessoAdmin) {
+      return;
+    }
+
+    try {
+      setTenants(carregarTenantsMock(sessao));
+    } catch (erro) {
+      setAviso(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível carregar os tenants demonstrativos.",
+      );
+    }
+  }, [acessoAdmin, sessao]);
 
   const tenantsFiltrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase("pt-BR");
@@ -97,41 +80,79 @@ export default function AdminPage() {
   function salvarTenant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!tenantEditando) {
+    if (!tenantEditando || !sessao) {
       return;
     }
 
-    setTenants((atuais) =>
-      atuais.map((tenant) =>
-        tenant.id === tenantEditando.id ? tenantEditando : tenant,
-      ),
+    const atualizados = tenants.map((tenant) =>
+      tenant.id === tenantEditando.id ? tenantEditando : tenant,
     );
-    setTenantEditando(null);
-    setAviso("Dados do tenant atualizados nesta sessão.");
+
+    try {
+      salvarTenantsMock(sessao, atualizados);
+      setTenants(atualizados);
+      setTenantEditando(null);
+      setAviso("Tenant atualizado no armazenamento local de demonstração.");
+    } catch (erro) {
+      setAviso(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível salvar o tenant demonstrativo.",
+      );
+    }
   }
 
   function alternarFlagTenant(
     tenantId: string,
     feature: FeatureFlagTenant,
   ) {
-    setTenants((atuais) =>
-      atuais.map((tenant) =>
-        tenant.id === tenantId
-          ? {
-              ...tenant,
-              featureFlags: alternarFeatureFlag(tenant.featureFlags, feature),
-            }
-          : tenant,
-      ),
+    if (!sessao) {
+      return;
+    }
+
+    const atualizados = tenants.map((tenant) =>
+      tenant.id === tenantId
+        ? {
+            ...tenant,
+            featureFlags: alternarFeatureFlag(tenant.featureFlags, feature),
+          }
+        : tenant,
     );
+
+    try {
+      salvarTenantsMock(sessao, atualizados);
+      setTenants(atualizados);
+      setAviso("Feature flag atualizada no armazenamento local.");
+    } catch (erro) {
+      setAviso(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível salvar a feature flag.",
+      );
+    }
   }
 
-  function atualizarTenantEditado<K extends keyof TenantAdministrado>(
+  function atualizarTenantEditado<
+    K extends keyof TenantAdministradoMock,
+  >(
     campo: K,
-    valor: TenantAdministrado[K],
+    valor: TenantAdministradoMock[K],
   ) {
     setTenantEditando((atual) =>
       atual ? { ...atual, [campo]: valor } : atual,
+    );
+  }
+
+  if (!acessoAdmin) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <ShieldOff className="mx-auto h-10 w-10 text-rose-500" aria-hidden />
+        <h1 className="mt-4 text-2xl font-bold">Acesso restrito</h1>
+        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+          O Painel BCTech exige uma sessão SUPER_ADMIN. A sessão de demonstração
+          está desativada em produção.
+        </p>
+      </main>
     );
   }
 
@@ -164,9 +185,9 @@ export default function AdminPage() {
           <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <p>
             <strong>Interface demonstrativa:</strong> este repositório ainda não
-            possui autenticação nem integração de tenants com o Prisma. Os
-            registros são exemplos e as alterações ficam apenas nesta sessão;
-            não use esta tela como controle administrativo em produção.
+            possui autenticação nem integração de tenants com o Prisma. A sessão
+            SUPER_ADMIN mock existe apenas fora de produção; as alterações são
+            armazenadas localmente neste navegador e não afetam tenants reais.
           </p>
         </aside>
 
@@ -404,7 +425,7 @@ export default function AdminPage() {
                     onChange={(event) =>
                       atualizarTenantEditado(
                         "status",
-                        event.target.value as StatusTenant,
+                        event.target.value as StatusTenantMock,
                       )
                     }
                     className={campoClassName}

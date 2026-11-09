@@ -39,6 +39,7 @@ import {
 
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { resolverSessaoAtiva } from "@/lib/session";
 
 export type EmployeeRole =
   | "SUPER_ADMIN"
@@ -75,6 +76,7 @@ interface MenuGroup {
   icon: LucideIcon;
   items: MenuLink[];
   managerOnly?: boolean;
+  superAdminOnly?: boolean;
 }
 
 const ROLE_LABELS: Record<EmployeeRole, string> = {
@@ -153,6 +155,11 @@ const MENU_GROUPS: MenuGroup[] = [
         href: "/fiscal/emissao",
         icon: FileCheck,
       },
+      {
+        label: "Painel Fiscal SEFAZ",
+        href: "/fiscal/nfe",
+        icon: FileText,
+      },
       { label: "Sped", href: "/fiscal/sped", icon: FileSpreadsheet },
     ],
   },
@@ -167,6 +174,12 @@ const MENU_GROUPS: MenuGroup[] = [
         icon: ShieldCheck,
       },
     ],
+  },
+  {
+    label: "BCTech",
+    icon: ShieldCheck,
+    superAdminOnly: true,
+    items: [{ label: "Painel Super Admin", href: "/admin", icon: ShieldCheck }],
   },
 ];
 
@@ -225,8 +238,19 @@ function ThemeToggle() {
 
 export function Header({
   tenant = DEFAULT_TENANT,
-  user = DEFAULT_USER,
+  user,
 }: HeaderProps) {
+  const sessao = resolverSessaoAtiva();
+  const usuario =
+    user ??
+    (sessao
+      ? {
+          name: sessao.name,
+          role: "SUPER_ADMIN" as const,
+          email: null,
+          avatarUrl: null,
+        }
+      : DEFAULT_USER);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -234,9 +258,11 @@ export function Header({
   const headerRef = useRef<HTMLDivElement>(null);
   const { isHelpOpen, openHelp, closeHelp } = useKeyboardShortcuts();
 
-  const isManager = isManagerRole(user.role);
+  const isManager = isManagerRole(usuario.role);
   const visibleGroups = MENU_GROUPS.filter(
-    (group) => !group.managerOnly || isManager,
+    (group) =>
+      (!group.managerOnly || isManager) &&
+      (!group.superAdminOnly || usuario.role === "SUPER_ADMIN"),
   );
 
   useEffect(() => {
@@ -411,24 +437,24 @@ export function Header({
               aria-haspopup="menu"
               className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-left transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
             >
-              {user.avatarUrl ? (
+              {usuario.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={user.avatarUrl}
-                  alt={`Foto de ${user.name}`}
+                  src={usuario.avatarUrl}
+                  alt={`Foto de ${usuario.name}`}
                   className="h-8 w-8 rounded-full object-cover"
                 />
               ) : (
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                  {getInitials(user.name)}
+                  {getInitials(usuario.name)}
                 </span>
               )}
               <span className="hidden max-w-[9rem] flex-col leading-tight xl:flex">
                 <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-50">
-                  {user.name}
+                  {usuario.name}
                 </span>
                 <span className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">
-                  {ROLE_LABELS[user.role]}
+                  {ROLE_LABELS[usuario.role]}
                 </span>
               </span>
               <ChevronDown
@@ -447,10 +473,10 @@ export function Header({
               >
                 <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
                   <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                    {user.name}
+                    {usuario.name}
                   </p>
                   <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                    {user.email ?? ROLE_LABELS[user.role]}
+                    {usuario.email ?? ROLE_LABELS[usuario.role]}
                   </p>
                 </div>
                 <Link
@@ -573,24 +599,24 @@ export function Header({
 
           {/* Perfil mobile */}
           <div className="mt-4 flex items-center gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-            {user.avatarUrl ? (
+            {usuario.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={user.avatarUrl}
-                alt={`Foto de ${user.name}`}
+                src={usuario.avatarUrl}
+                alt={`Foto de ${usuario.name}`}
                 className="h-10 w-10 rounded-full object-cover"
               />
             ) : (
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                {getInitials(user.name)}
+                {getInitials(usuario.name)}
               </span>
             )}
             <div className="min-w-0 flex-1 leading-tight">
               <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                {user.name}
+                {usuario.name}
               </p>
               <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                {ROLE_LABELS[user.role]}
+                {ROLE_LABELS[usuario.role]}
               </p>
             </div>
             <Link

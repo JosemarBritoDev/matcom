@@ -29,10 +29,10 @@ export type ModuloTenant = (typeof MODULOS_TENANT)[number];
 /**
  * Módulos que uma tela pode solicitar.
  *
- * `expedicao` é um alias comercial de `logistica`: permite ligar/desligar a
- * operação de expedição sem criar uma coluna nova no schema.
+ * `expedicao` é um alias comercial de `logistica`. `nfe` usa a flag avulsa
+ * `emissaoFiscalSefaz`, mantendo compatibilidade com as colunas existentes.
  */
-export type ModuloSolicitado = ModuloTenant | "expedicao";
+export type ModuloSolicitado = ModuloTenant | "expedicao" | "nfe";
 
 /** Configuração de módulos de um tenant, com override opcional de expedição. */
 export interface TenantModulesConfig {
@@ -44,6 +44,8 @@ export interface TenantModulesConfig {
   iaAssistant?: boolean;
   /** Override explícito da expedição. Quando ausente, herda `logistica`. */
   expedicao?: boolean;
+  /** Flag comercial de emissão NF-e/NFC-e no model TenantModule. */
+  emissaoFiscalSefaz?: boolean;
 }
 
 export interface AcessoModulo {
@@ -77,6 +79,7 @@ export const ROTULOS_MODULOS: Record<ModuloSolicitado, string> = {
   fiscal: "Fiscal",
   iaAssistant: "Assistente IA",
   expedicao: "Expedição & Separação de Galpão",
+  nfe: "Emissão Fiscal SEFAZ",
 };
 
 const MODULO_PERSISTIDO: Record<ModuloSolicitado, ModuloTenant> = {
@@ -87,6 +90,7 @@ const MODULO_PERSISTIDO: Record<ModuloSolicitado, ModuloTenant> = {
   fiscal: "fiscal",
   iaAssistant: "iaAssistant",
   expedicao: "logistica",
+  nfe: "fiscal",
 };
 
 /* -------------------------------------------------------------------------- */
@@ -119,17 +123,26 @@ export function moduloAtivo(
     return moduloConfig.expedicao;
   }
 
+  if (modulo === "nfe") {
+    return (
+      moduloConfig.emissaoFiscalSefaz ??
+      moduloConfig.fiscal ??
+      MODULOS_PADRAO.fiscal
+    );
+  }
+
   const persistido = resolverModuloPersistido(modulo);
   return moduloConfig[persistido] ?? MODULOS_PADRAO[persistido];
 }
 
 /** Monta a mensagem exibida na tela de módulo não contratado. */
 export function mensagemModuloNaoContratado(modulo: ModuloSolicitado): string {
-  const persistido = resolverModuloPersistido(modulo);
+  const flag =
+    modulo === "nfe" ? "emissaoFiscalSefaz" : resolverModuloPersistido(modulo);
   const alias =
     modulo === "expedicao" ? ' (ou o alias "expedicao" na configuração)' : "";
 
-  return `O módulo ${ROTULOS_MODULOS[modulo]} não está contratado para este tenant. Ative a flag "${persistido}"${alias} em TenantModule nas configurações da empresa para liberar o acesso.`;
+  return `O módulo ${ROTULOS_MODULOS[modulo]} não está contratado para este tenant. Ative a flag "${flag}"${alias} em TenantModule nas configurações da empresa para liberar o acesso.`;
 }
 
 /**
@@ -161,6 +174,7 @@ export function listarModulosAtivos(
     "compras",
     "logistica",
     "fiscal",
+    "nfe",
     "iaAssistant",
     "expedicao",
   ];
@@ -379,7 +393,7 @@ export const MODULO_PERSISTIDO_FEATURE: Record<
   orcamentos: "vendas",
   expedicao: "expedicao",
   comprasCurvaAbc: "compras",
-  emissaoFiscalSefaz: "fiscal",
+  emissaoFiscalSefaz: "nfe",
 };
 
 /** Completa a configuração de flags com os padrões do SaaS. */
@@ -434,6 +448,7 @@ export function featureFlagsParaModulos(
     vendas: resolvidas.orcamentos,
     compras: resolvidas.comprasCurvaAbc,
     fiscal: resolvidas.emissaoFiscalSefaz,
+    emissaoFiscalSefaz: resolvidas.emissaoFiscalSefaz,
     logistica: resolvidas.expedicao,
     expedicao: resolvidas.expedicao,
   };

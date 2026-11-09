@@ -77,6 +77,10 @@ O **MatCom** é um SaaS multi-tenant de gestão para lojas de materiais de const
 - **Prisma como única camada de acesso ao banco.** Proibido SQL solto sem justificativa documentada.
 - **Validação na borda** com Zod (previsto) antes de qualquer escrita.
 - **Multi-tenancy por coluna** (`tenantId`) com filtragem obrigatória em todas as queries.
+- **Sessão mock de desenvolvimento** centralizada em `src/lib/session.ts`; o
+  ambiente de produção falha fechado até a integração de autenticação real.
+- **Persistência administrativa mock** usa `localStorage` somente para
+  demonstração local; não substitui Prisma nem autoriza operações em produção.
 - **Banco em Supabase** usando pooler para runtime e conexão direta para migrations.
 - **Deploy na Vercel** com Preview por Pull Request e Production na branch `main`.
 
@@ -118,7 +122,7 @@ matcom/
 | ORM | Prisma 6.19.3 | Schema único + migrations versionadas |
 | Banco | PostgreSQL (Supabase) | Pooler + conexão direta |
 | Deploy | Vercel | Preview + Production |
-| Autenticação | A definir | Previsto: Auth.js ou Supabase Auth |
+| Autenticação | Mock somente em desenvolvimento | Produção nega as rotas administrativas até Auth.js/Supabase Auth |
 | Validação | Zod | Previsto para Server Actions e forms |
 
 ### 2.5 Estratégia de temas
@@ -128,6 +132,13 @@ matcom/
 - A troca é feita por `next-themes` com `attribute="class"`; a classe `dark` é aplicada no `<html>`.
 - A variante `dark` do Tailwind é declarada explicitamente em `src/app/globals.css` com `@custom-variant dark (&:where(.dark, .dark *));`.
 - Cores white-label do tenant: `primaryColor`, `accentColor`, `logoUrl` e `welcomeMessage` (modelo `Tenant`).
+
+### 2.6 Permissão de emissão fiscal
+
+- O alias comercial `nfe` resolve para `TenantModule.emissaoFiscalSefaz`, com
+  fallback para a flag geral `fiscal` em configurações legadas.
+- O Painel Fiscal SEFAZ apresentado no ambiente de desenvolvimento usa dados
+  simulados; não transmite XML nem acessa certificado ou serviço externo.
 
 ---
 
@@ -140,7 +151,7 @@ Arquivo: `prisma/schema.prisma`.
 | Entidade | Responsabilidade |
 | --- | --- |
 | `Tenant` | Loja cliente. Raiz do isolamento multi-tenant e da personalização white-label. |
-| `TenantModule` | Flags de módulos contratados/ativos por tenant (`vendas`, `caixa`, `compras`, `logistica`, `fiscal`, `iaAssistant`). |
+| `TenantModule` | Flags de módulos contratados/ativos por tenant (`vendas`, `caixa`, `compras`, `logistica`, `fiscal`, `iaAssistant`) e recursos avulsos (`orcamentos`, `expedicao`, `comprasCurvaAbc`, `emissaoFiscalSefaz`). |
 | `User` | Usuário do tenant com papel (`EmployeeRole`). |
 | `Customer` | Cliente da loja, com tabela de preço e status de aprovação. |
 | `Supplier` | Fornecedor. |
