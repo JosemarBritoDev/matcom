@@ -8,14 +8,28 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum TenantPlan {
+  FREE
+  START
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ATIVO
+  SUSPENSO
+}
+
 model Tenant {
-  id        String   @id @default(uuid())
+  id        String       @id @default(uuid())
   name      String
-  document  String   @unique
+  document  String       @unique
   phone     String?
   email     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  plan      TenantPlan   @default(FREE)
+  status    TenantStatus @default(ATIVO)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   logoUrl        String?
   welcomeMessage String? @default("Bem-vindo ao sistema da sua loja de materiais de construção.")
@@ -32,14 +46,18 @@ model Tenant {
 }
 
 model TenantModule {
-  id          String  @id @default(uuid())
-  tenantId    String  @unique
-  vendas      Boolean @default(true)
-  caixa       Boolean @default(true)
-  compras     Boolean @default(true)
-  logistica   Boolean @default(true)
-  fiscal      Boolean @default(false)
-  iaAssistant Boolean @default(true)
+  id                 String  @id @default(uuid())
+  tenantId           String  @unique
+  vendas             Boolean @default(true)
+  caixa              Boolean @default(true)
+  compras            Boolean @default(true)
+  logistica          Boolean @default(true)
+  fiscal             Boolean @default(false)
+  iaAssistant        Boolean @default(true)
+  orcamentos         Boolean @default(true)
+  expedicao          Boolean @default(true)
+  comprasCurvaAbc    Boolean @default(true)
+  emissaoFiscalSefaz Boolean @default(false)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -118,6 +136,7 @@ model Product {
   barcodeEan      String?
   name            String
   description     String?
+  imageUrl        String?
   category        String?
   costPrice       Decimal  @db.Decimal(10, 2)
   retailPrice     Decimal  @db.Decimal(10, 2)
@@ -148,19 +167,41 @@ enum DeliveryMode {
   ENTREGA_PENDENTE
 }
 
+enum FiscalDocumentType {
+  NFCE
+  NFE
+  RECIBO_INTERNO
+}
+
+enum FiscalStatus {
+  NAO_APLICAVEL
+  PENDENTE_ENVIO
+  ENVIADO
+  AUTORIZADO
+  REJEITADO
+}
+
 model Order {
-  id            String      @id @default(uuid())
-  tenantId      String
-  code          Int         @default(autoincrement())
-  sellerId      String
-  customerId    String?
-  status        OrderStatus @default(PENDENTE)
-  totalAmount   Decimal     @db.Decimal(10, 2)
-  paymentMethod String?
-  isLocked      Boolean     @default(false)
-  canceledBy    String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                 String             @id @default(uuid())
+  tenantId           String
+  code               Int                @default(autoincrement())
+  sellerId           String
+  customerId         String?
+  status             OrderStatus        @default(PENDENTE)
+  totalAmount        Decimal            @db.Decimal(10, 2)
+  paymentMethod      String?
+  isLocked           Boolean            @default(false)
+  canceledBy         String?
+  fiscalDocumentType FiscalDocumentType @default(RECIBO_INTERNO)
+  fiscalDocument     String?
+  fiscalStatus       FiscalStatus       @default(NAO_APLICAVEL)
+  fiscalPayload      Json?
+  fiscalKey          String?
+  paidAt             DateTime?
+  stockDeductedAt    DateTime?
+  financialPostedAt  DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   seller   User        @relation("VendedorOrder", fields: [sellerId], references: [id])

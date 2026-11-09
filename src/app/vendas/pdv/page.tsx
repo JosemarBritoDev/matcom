@@ -54,7 +54,7 @@ interface Product {
   ean: string;
   internalCode: string;
   name: string;
-  imageUrl: string;
+  imagemUrl: string;
   stock: number;
   unit: ProductUnit;
   retailPrice: number;
@@ -149,7 +149,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500011",
     internalCode: "CIM-001",
     name: "Cimento CP II 50 kg",
-    imageUrl: "/products/cimento.svg",
+    imagemUrl: "/products/cimento.svg",
     stock: 320,
     unit: "saco",
     retailPrice: 38.9,
@@ -161,7 +161,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500028",
     internalCode: "ARE-002",
     name: "Areia média lavada",
-    imageUrl: "/products/areia.svg",
+    imagemUrl: "/products/areia.svg",
     stock: 18.5,
     unit: "m³",
     retailPrice: 129.9,
@@ -173,7 +173,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500035",
     internalCode: "BLO-003",
     name: "Bloco de concreto 14x19x39",
-    imageUrl: "/products/bloco.svg",
+    imagemUrl: "/products/bloco.svg",
     stock: 4800,
     unit: "un",
     retailPrice: 2.75,
@@ -185,7 +185,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500042",
     internalCode: "TIN-004",
     name: "Tinta acrílica premium 18 L",
-    imageUrl: "/products/tinta.svg",
+    imagemUrl: "/products/tinta.svg",
     stock: 42,
     unit: "lata",
     retailPrice: 289.9,
@@ -197,7 +197,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500059",
     internalCode: "POR-005",
     name: "Porcelanato acetinado 80x80 cm",
-    imageUrl: "/products/porcelanato.svg",
+    imagemUrl: "/products/porcelanato.svg",
     stock: 96,
     unit: "caixa",
     retailPrice: 159.9,
@@ -209,7 +209,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500066",
     internalCode: "ARG-006",
     name: "Argamassa AC-III 20 kg",
-    imageUrl: "/products/cimento.svg",
+    imagemUrl: "/products/cimento.svg",
     stock: 210,
     unit: "saco",
     retailPrice: 42.5,
@@ -221,7 +221,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500073",
     internalCode: "VER-007",
     name: "Vergalhão CA-50 10 mm 12 m",
-    imageUrl: "/products/aco.svg",
+    imagemUrl: "/products/aco.svg",
     stock: 340,
     unit: "un",
     retailPrice: 68.9,
@@ -233,7 +233,7 @@ const PRODUCTS: Product[] = [
     ean: "7891234500080",
     internalCode: "TEL-008",
     name: "Tela soldada Q-138",
-    imageUrl: "/products/aco.svg",
+    imagemUrl: "/products/aco.svg",
     stock: 75,
     unit: "un",
     retailPrice: 189.9,
@@ -988,7 +988,7 @@ export default function PdvPage() {
                                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-violet-50 dark:hover:bg-violet-950/40"
                               >
                                 <img
-                                  src={product.imageUrl}
+                                  src={product.imagemUrl}
                                   alt=""
                                   width={48}
                                   height={48}
@@ -1190,7 +1190,7 @@ export default function PdvPage() {
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
                                   <img
-                                    src={item.product.imageUrl}
+                                    src={item.product.imagemUrl}
                                     alt=""
                                     width={40}
                                     height={40}
@@ -1269,7 +1269,7 @@ export default function PdvPage() {
                         >
                           <div className="flex items-start gap-3">
                             <img
-                              src={item.product.imageUrl}
+                              src={item.product.imagemUrl}
                               alt=""
                               width={44}
                               height={44}

@@ -13,10 +13,12 @@ import {
   FileInput,
   FileSpreadsheet,
   FileText,
+  Keyboard,
   LogOut,
   Menu,
   Moon,
   Package,
+  PackageSearch,
   Receipt,
   Settings,
   ShieldCheck,
@@ -34,6 +36,9 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+
+import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 export type EmployeeRole =
   | "SUPER_ADMIN"
@@ -95,7 +100,7 @@ const MENU_GROUPS: MenuGroup[] = [
         icon: Tag,
       },
       { label: "Vendedores", href: "/vendas/vendedores", icon: UserCog },
-      { label: "Expedição & Romaneio", href: "/vendas/expedicao", icon: Truck },
+      { label: "Expedição & Separação", href: "/logistica/expedicao", icon: Truck },
       { label: "Relatórios", href: "/vendas/relatorios", icon: BarChart3 },
     ],
   },
@@ -104,6 +109,11 @@ const MENU_GROUPS: MenuGroup[] = [
     icon: Truck,
     items: [
       { label: "Pedidos de Compra", href: "/compras/pedidos", icon: Truck },
+      {
+        label: "Sugestão de Compra",
+        href: "/compras/sugestao",
+        icon: PackageSearch,
+      },
       { label: "Fornecedores", href: "/fornecedores", icon: Factory },
       { label: "Entradas de NF-e", href: "/compras/nfe", icon: FileInput },
     ],
@@ -222,6 +232,7 @@ export function Header({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileGroup, setMobileGroup] = useState<string | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+  const { isHelpOpen, openHelp, closeHelp } = useKeyboardShortcuts();
 
   const isManager = isManagerRole(user.role);
   const visibleGroups = MENU_GROUPS.filter(
@@ -266,10 +277,11 @@ export function Header({
   }
 
   return (
-    <header
-      ref={headerRef}
-      className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75 print:hidden dark:border-zinc-800 dark:bg-zinc-950/90 dark:supports-[backdrop-filter]:bg-zinc-950/75"
-    >
+    <>
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75 print:hidden dark:border-zinc-800 dark:bg-zinc-950/90 dark:supports-[backdrop-filter]:bg-zinc-950/75"
+      >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         {/* Marca White-Label */}
         <Link
@@ -375,6 +387,16 @@ export function Header({
 
         {/* Ações à direita */}
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={openHelp}
+            aria-label="Abrir guia de atalhos (F1)"
+            title="Guia de atalhos (F1)"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            <Keyboard className="h-4 w-4" aria-hidden />
+          </button>
+
           <ThemeToggle />
 
           {/* Perfil do usuário */}
@@ -582,6 +604,9 @@ export function Header({
           </div>
         </div>
       )}
-    </header>
+      </header>
+
+      <ShortcutsModal open={isHelpOpen} onClose={closeHelp} />
+    </>
   );
 }

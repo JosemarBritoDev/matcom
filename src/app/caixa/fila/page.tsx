@@ -9,6 +9,7 @@ import {
   ArrowUpFromLine,
   BadgeCheck,
   Banknote,
+  Boxes,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -18,6 +19,8 @@ import {
   DoorOpen,
   Eye,
   EyeOff,
+  FileCheck2,
+  FileText,
   KeyRound,
   Landmark,
   Lock,
@@ -36,6 +39,15 @@ import {
   X,
 } from "lucide-react";
 
+import {
+  ROTULOS_DOCUMENTO_FISCAL,
+  ROTULOS_STATUS_FISCAL,
+  liquidarComandaFiscal,
+  validarDocumentoFiscal,
+  type ResultadoLiquidacaoFiscal,
+  type TipoDocumentoFiscal,
+} from "@/lib/fiscal-service";
+
 /* -------------------------------------------------------------------------- */
 /*                                   Tipos                                    */
 /* -------------------------------------------------------------------------- */
@@ -44,7 +56,7 @@ type OrderStatus = "AGUARDANDO_CAIXA" | "PAGO";
 type PaymentMethod = "DINHEIRO" | "PIX" | "DEBITO" | "CREDITO" | "FATURADO";
 type DeliveryMode = "RETIRADA" | "ENTREGA";
 type PricingTier = "VAREJO" | "ATACADO";
-type PrintVia = "CLIENTE" | "GALPAO";
+type PrintVia = "CLIENTE" | "GALPAO" | "CONFERENCIA";
 type ProductUnit = "m²" | "m³" | "kg" | "un" | "saco" | "caixa" | "lata";
 type CashMovementType = "ABERTURA" | "SANGRIA" | "SUPRIMENTO" | "GAVETA";
 type CashOperation =
@@ -86,6 +98,8 @@ interface PaymentDraft {
   installments: number;
   creditDays: number;
   pixConfirmed: boolean;
+  fiscalDocumentType: TipoDocumentoFiscal;
+  fiscalDocument: string;
 }
 
 interface PaidOrder {
@@ -97,6 +111,7 @@ interface PaidOrder {
   change?: number;
   installments?: number;
   creditDays?: number;
+  liquidacao: ResultadoLiquidacaoFiscal;
 }
 
 interface CashMovement {
@@ -140,7 +155,7 @@ interface ClosingReportData {
 
 const TENANT = {
   name: "MatCom Materiais",
-  document: "12.345.678/0001-90",
+  document: "11.222.333/0001-81",
   address: "Av. das Construções, 1450 — São Paulo/SP",
   phone: "(11) 4002-8922",
 };
@@ -167,7 +182,7 @@ const CASH_MOVEMENT_LABELS: Record<CashMovementType, string> = {
 const UNAUTHORIZED_SANGRIA_MESSAGE =
   "Operação não autorizada. Exige validação do Gerente";
 
-const PIX_KEY = "12.345.678/0001-90";
+const PIX_KEY = "11.222.333/0001-81";
 const MAX_INSTALLMENTS = 12;
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
@@ -216,12 +231,40 @@ const PAYMENT_METHODS: Array<{
   },
 ];
 
+const FISCAL_DOCUMENT_OPTIONS: Array<{
+  id: TipoDocumentoFiscal;
+  label: string;
+  hint: string;
+  icon: ReactNode;
+}> = [
+  {
+    id: "NFCE",
+    label: "NFC-e",
+    hint: "Cupom Fiscal",
+    icon: <FileText className="h-4 w-4" aria-hidden />,
+  },
+  {
+    id: "NFE",
+    label: "NF-e",
+    hint: "Nota Fiscal Cheia / Danfe",
+    icon: <FileCheck2 className="h-4 w-4" aria-hidden />,
+  },
+  {
+    id: "RECIBO_INTERNO",
+    label: "Recibo Interno",
+    hint: "Comprovante Não Fiscal",
+    icon: <Receipt className="h-4 w-4" aria-hidden />,
+  },
+];
+
 const EMPTY_PAYMENT: PaymentDraft = {
   method: null,
   cashReceived: "",
   installments: 1,
   creditDays: 30,
   pixConfirmed: false,
+  fiscalDocumentType: "RECIBO_INTERNO",
+  fiscalDocument: "",
 };
 
 function minutesAgo(minutes: number) {
@@ -236,7 +279,7 @@ function buildSeedOrders(): CashierOrder[] {
       status: "AGUARDANDO_CAIXA",
       enteredAt: minutesAgo(34),
       customerName: "Construtora Horizonte Ltda.",
-      customerDocument: "12.345.678/0001-90",
+      customerDocument: "04.252.011/0001-10",
       sellerName: "Ana Paula",
       deliveryMode: "ENTREGA",
       deliveryAddress: "Rua das Acácias, 220 — Galpão 3, São Paulo/SP",
@@ -288,7 +331,7 @@ function buildSeedOrders(): CashierOrder[] {
       status: "AGUARDANDO_CAIXA",
       enteredAt: minutesAgo(22),
       customerName: "Carlos Eduardo Martins",
-      customerDocument: "123.456.789-00",
+      customerDocument: "529.982.247-25",
       sellerName: "Bruno Lima",
       deliveryMode: "RETIRADA",
       deliveryAddress: "Retirada no balcão — MatCom Matriz",
@@ -322,7 +365,7 @@ function buildSeedOrders(): CashierOrder[] {
       status: "AGUARDANDO_CAIXA",
       enteredAt: minutesAgo(15),
       customerName: "Reforma Fácil Materiais",
-      customerDocument: "98.765.432/0001-10",
+      customerDocument: "11.444.777/0001-61",
       sellerName: "Ana Paula",
       deliveryMode: "ENTREGA",
       deliveryAddress: "Av. Industrial, 780 — Vila Leopoldina, São Paulo/SP",
@@ -399,7 +442,7 @@ function buildSeedOrders(): CashierOrder[] {
       status: "AGUARDANDO_CAIXA",
       enteredAt: minutesAgo(3),
       customerName: "Obra Nova Engenharia",
-      customerDocument: "45.678.912/0001-33",
+      customerDocument: "33.000.167/0001-01",
       sellerName: "Diego Rocha",
       deliveryMode: "ENTREGA",
       deliveryAddress: "Rod. dos Bandeirantes, km 24 — Obra Bloco B, Cajamar/SP",
@@ -818,6 +861,16 @@ function ClientReceipt({ paid }: { paid: PaidOrder }) {
           <strong>CPF/CNPJ:</strong> {order.customerDocument}
         </p>
         <p>
+          <strong>Documento fiscal:</strong>{" "}
+          {ROTULOS_DOCUMENTO_FISCAL[paid.liquidacao.tipo]}
+        </p>
+        {paid.liquidacao.disparaSefaz && (
+          <p>
+            <strong>SEFAZ:</strong>{" "}
+            {ROTULOS_STATUS_FISCAL[paid.liquidacao.statusFiscal]}
+          </p>
+        )}
+        <p>
           <strong>Entrega:</strong>{" "}
           {order.deliveryMode === "ENTREGA" ? "Entrega" : "Retirada no balcão"}
         </p>
@@ -985,6 +1038,107 @@ function WarehouseReceipt({ paid }: { paid: PaidOrder }) {
       <div className="mt-3 space-y-2 text-[8px]">
         <p>Separado por: ______________________</p>
         <p>Conferido por: _____________________</p>
+        <p>Recebido por: ______________________</p>
+      </div>
+
+      <ReceiptFooter />
+    </div>
+  );
+}
+
+function ConferenceReceipt({ paid }: { paid: PaidOrder }) {
+  const { order } = paid;
+  const total = getOrderTotal(order);
+
+  return (
+    <div className="hidden w-[80mm] bg-white p-1 text-black print:block">
+      <ReceiptHeader via="Comprovante de conferência de balcão" />
+
+      <div className="mt-1 space-y-0.5 text-[9px] leading-snug">
+        <p>
+          <strong>Comanda:</strong> #{order.number} ·{" "}
+          <strong>Status:</strong> PAGO
+        </p>
+        <p>
+          <strong>Data:</strong> {formatDateTime(paid.paidAt)}
+        </p>
+        <p>
+          <strong>Cliente:</strong> {order.customerName}
+        </p>
+        <p>
+          <strong>CPF/CNPJ:</strong> {order.customerDocument || "—"}
+        </p>
+        <p>
+          <strong>Operador:</strong> {paid.operatorName} ({OPERATOR.code})
+        </p>
+        <p>
+          <strong>Documento:</strong> Recibo Interno de Venda — não fiscal
+        </p>
+      </div>
+
+      <div className="mt-1 rounded border border-black p-1 text-[9px] leading-snug">
+        <p className="text-[10px] font-extrabold uppercase">
+          {order.deliveryMode === "ENTREGA"
+            ? "Entrega agendada"
+            : "Retirada no balcão"}
+        </p>
+        <p>{order.deliveryAddress}</p>
+      </div>
+
+      <div className="my-1 border-t border-dashed border-black" />
+
+      <table className="w-full border-collapse text-[9px]">
+        <thead>
+          <tr className="border-b border-black text-left">
+            <th className="py-0.5 font-bold">Item</th>
+            <th className="w-14 py-0.5 text-right font-bold">Qtd.</th>
+            <th className="w-8 py-0.5 text-right font-bold">Un.</th>
+            <th className="w-14 py-0.5 text-right font-bold">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.items.map((item) => (
+            <tr
+              key={item.id}
+              className="border-b border-dotted border-zinc-400 align-top"
+            >
+              <td className="py-0.5 pr-1">{item.name}</td>
+              <td className="py-0.5 text-right whitespace-nowrap">
+                {formatQuantity(item.quantity)}
+              </td>
+              <td className="py-0.5 text-right whitespace-nowrap">
+                {item.unit}
+              </td>
+              <td className="py-0.5 text-right whitespace-nowrap">
+                {formatBRL(getItemTotal(item))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="mt-1 flex justify-between border-t border-black pt-0.5 text-[11px] font-bold">
+        <span>TOTAL</span>
+        <span>{formatBRL(total)}</span>
+      </div>
+
+      <div className="mt-1 border-t border-dashed border-black pt-1 text-[9px]">
+        <p>
+          <strong>Pagamento:</strong> {PAYMENT_LABELS[paid.method]}
+        </p>
+        <p>Estoque baixado imediatamente após a conferência.</p>
+        <p>Receita lançada no financeiro e no DRE.</p>
+        <p>Documento emitido sem integração com a SEFAZ.</p>
+      </div>
+
+      {order.notes && (
+        <p className="mt-1 text-[9px]">
+          <strong>Obs.:</strong> {order.notes}
+        </p>
+      )}
+
+      <div className="mt-3 space-y-2 text-[8px]">
+        <p>Conferido por: ______________________</p>
         <p>Recebido por: ______________________</p>
       </div>
 
@@ -1239,8 +1393,15 @@ export default function FilaDoCaixaPage() {
   const changeValue = Math.max(0, cashReceived - selectedTotal);
   const missingValue = Math.max(0, selectedTotal - cashReceived);
 
+  const fiscalValidation = useMemo(
+    () => validarDocumentoFiscal(payment.fiscalDocumentType, payment.fiscalDocument),
+    [payment.fiscalDocumentType, payment.fiscalDocument],
+  );
+
+  const exigeDocumentoFiscal = payment.fiscalDocumentType !== "RECIBO_INTERNO";
+
   const canFinalize = useMemo(() => {
-    if (!selectedOrder || !payment.method) {
+    if (!selectedOrder || !payment.method || !fiscalValidation.ok) {
       return false;
     }
 
@@ -1262,7 +1423,7 @@ export default function FilaDoCaixaPage() {
       default:
         return true;
     }
-  }, [selectedOrder, payment, cashReceived, selectedTotal]);
+  }, [selectedOrder, payment, cashReceived, selectedTotal, fiscalValidation.ok]);
 
   const blockReason = useMemo(() => {
     if (!selectedOrder) {
@@ -1271,6 +1432,10 @@ export default function FilaDoCaixaPage() {
 
     if (!payment.method) {
       return "Selecione a forma de pagamento para liberar o selo da comanda.";
+    }
+
+    if (!fiscalValidation.ok) {
+      return fiscalValidation.mensagem;
     }
 
     if (payment.method === "DINHEIRO" && cashReceived < selectedTotal) {
@@ -1289,7 +1454,7 @@ export default function FilaDoCaixaPage() {
     }
 
     return null;
-  }, [selectedOrder, payment.method, payment.pixConfirmed, cashReceived, selectedTotal, missingValue]);
+  }, [selectedOrder, payment.method, payment.pixConfirmed, cashReceived, selectedTotal, missingValue, fiscalValidation]);
 
   useEffect(() => {
     function updateNow() {
@@ -1342,13 +1507,15 @@ export default function FilaDoCaixaPage() {
     };
   }, [printRequest]);
 
-  function resetPayment() {
-    setPayment({ ...EMPTY_PAYMENT });
+  function resetPayment(document = "") {
+    setPayment({ ...EMPTY_PAYMENT, fiscalDocument: document });
   }
 
   function selectOrder(orderId: string) {
+    const order = orders.find((item) => item.id === orderId);
+
     setSelectedId(orderId);
-    resetPayment();
+    resetPayment(order?.customerDocument ?? "");
 
     if (window.matchMedia("(max-width: 1279px)").matches) {
       window.requestAnimationFrame(() => {
@@ -1387,6 +1554,29 @@ export default function FilaDoCaixaPage() {
       return;
     }
 
+    const liquidacao = liquidarComandaFiscal({
+      orderId: selectedOrder.id,
+      orderNumber: selectedOrder.number,
+      tipo: payment.fiscalDocumentType,
+      documento: payment.fiscalDocument,
+      clienteNome: selectedOrder.customerName,
+      formaPagamento: payment.method,
+      total: selectedTotal,
+      itens: selectedOrder.items.map((item) => ({
+        itemId: item.id,
+        descricao: item.name,
+        unidade: item.unit,
+        quantidade: item.quantity,
+        valorUnitario: getItemUnitPrice(item),
+        valorTotal: getItemTotal(item),
+      })),
+      emitidaEm: new Date(),
+    });
+
+    if (!liquidacao.ok) {
+      return;
+    }
+
     const paid: PaidOrder = {
       order: { ...selectedOrder, status: "PAGO" },
       method: payment.method,
@@ -1399,6 +1589,7 @@ export default function FilaDoCaixaPage() {
         payment.method === "CREDITO" ? payment.installments : undefined,
       creditDays:
         payment.method === "FATURADO" ? payment.creditDays : undefined,
+      liquidacao,
     };
 
     setOrders((currentOrders) =>
@@ -2292,6 +2483,117 @@ export default function FilaDoCaixaPage() {
                       )}
                     </div>
 
+                    {/* Tipo de emissão fiscal */}
+                    <div className="mt-4">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Tipo de Emissão Fiscal
+                      </p>
+
+                      <div className="mt-1.5 grid gap-1.5">
+                        {FISCAL_DOCUMENT_OPTIONS.map((option) => {
+                          const active =
+                            payment.fiscalDocumentType === option.id;
+
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() =>
+                                setPayment((current) => ({
+                                  ...current,
+                                  fiscalDocumentType: option.id,
+                                  fiscalDocument:
+                                    option.id === "RECIBO_INTERNO"
+                                      ? current.fiscalDocument
+                                      : current.fiscalDocument ||
+                                        selectedOrder.customerDocument,
+                                }))
+                              }
+                              aria-pressed={active}
+                              className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
+                                active
+                                  ? "border-violet-400 bg-violet-50 text-violet-700 ring-2 ring-violet-500/20 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+                                  : "border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                              }`}
+                            >
+                              <span
+                                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                                  active
+                                    ? "border-violet-600 dark:border-violet-400"
+                                    : "border-zinc-300 dark:border-zinc-600"
+                                }`}
+                              >
+                                {active && (
+                                  <span className="h-2 w-2 rounded-full bg-violet-600 dark:bg-violet-400" />
+                                )}
+                              </span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {option.icon}
+                                <span className="min-w-0">
+                                  <span className="block text-[11px] font-bold">
+                                    {option.label}
+                                  </span>
+                                  <span
+                                    className={`block text-[10px] ${
+                                      active
+                                        ? "text-violet-600/80 dark:text-violet-300/80"
+                                        : "text-zinc-500 dark:text-zinc-400"
+                                    }`}
+                                  >
+                                    {option.hint}
+                                  </span>
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {exigeDocumentoFiscal && (
+                        <div className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/50">
+                          <label
+                            htmlFor="fiscal-document"
+                            className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                          >
+                            CPF/CNPJ do destinatário
+                          </label>
+                          <input
+                            id="fiscal-document"
+                            type="text"
+                            inputMode="numeric"
+                            value={payment.fiscalDocument}
+                            onChange={(event) => {
+                              const next = event.target.value.slice(0, 20);
+                              setPayment((current) => ({
+                                ...current,
+                                fiscalDocument: next,
+                              }));
+                            }}
+                            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                            className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-900 tabular-nums focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                          />
+                          <p
+                            className={`mt-1.5 text-[11px] leading-snug ${
+                              fiscalValidation.ok
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : "text-amber-700 dark:text-amber-400"
+                            }`}
+                          >
+                            {fiscalValidation.ok
+                              ? `Documento válido (${fiscalValidation.tipoDocumento}). O payload fiscal será preparado para envio à SEFAZ.`
+                              : fiscalValidation.mensagem}
+                          </p>
+                        </div>
+                      )}
+
+                      <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-2 text-[10px] font-medium leading-snug text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                        <Boxes className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {payment.fiscalDocumentType === "RECIBO_INTERNO"
+                          ? "Recibo Interno: baixa imediata no estoque, lançamento financeiro, DRE atualizado e comprovante de conferência — sem SEFAZ."
+                          : "NFC-e/NF-e: payload fiscal preparado para a SEFAZ, mantendo a baixa de estoque e o lançamento financeiro."}
+                      </p>
+                    </div>
+
                     {/* Ação final */}
                     <button
                       type="button"
@@ -2451,8 +2753,93 @@ export default function FilaDoCaixaPage() {
                 </div>
               </div>
 
+              {/* Resumo fiscal e efeitos da liquidação */}
+              <div className="mt-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      Emissão fiscal
+                    </p>
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                      {ROTULOS_DOCUMENTO_FISCAL[lastPaid.liquidacao.tipo]}
+                    </p>
+                    {lastPaid.liquidacao.documento ? (
+                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                        {lastPaid.liquidacao.tipoDocumento}:{" "}
+                        {lastPaid.liquidacao.documento}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                        Sem CPF/CNPJ — venda de balcão
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide ring-1 ${
+                      lastPaid.liquidacao.disparaSefaz
+                        ? "bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900"
+                        : "bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900"
+                    }`}
+                  >
+                    {lastPaid.liquidacao.disparaSefaz ? (
+                      <FileCheck2 className="h-3 w-3" aria-hidden />
+                    ) : (
+                      <Receipt className="h-3 w-3" aria-hidden />
+                    )}
+                    {lastPaid.liquidacao.statusFiscal === "PENDENTE_ENVIO"
+                      ? "SEFAZ pendente"
+                      : "Sem SEFAZ"}
+                  </span>
+                </div>
+
+                <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                  {ROTULOS_STATUS_FISCAL[lastPaid.liquidacao.statusFiscal]}
+                </p>
+
+                <ul className="mt-2 grid gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Baixa imediata de {lastPaid.liquidacao.baixasEstoque.length}{" "}
+                    item(ns) no estoque físico
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Lançamento financeiro de{" "}
+                    {formatBRL(
+                      lastPaid.liquidacao.lancamentosFinanceiros[0]?.valor ?? 0,
+                    )}{" "}
+                    registrado
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    DRE atualizado com a receita da venda
+                  </li>
+                  {lastPaid.liquidacao.comprovanteConferencia && (
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Comprovante de conferência de balcão liberado
+                    </li>
+                  )}
+                </ul>
+
+                {lastPaid.liquidacao.payloadFiscal && (
+                  <details className="mt-2 rounded-lg bg-zinc-50 p-2 dark:bg-zinc-950/60">
+                    <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                      Payload fiscal preparado
+                    </summary>
+                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[9px] leading-snug text-zinc-600 dark:text-zinc-300">
+                      {JSON.stringify(
+                        lastPaid.liquidacao.payloadFiscal,
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </details>
+                )}
+              </div>
+
               <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                Dupla impressão
+                Impressão e comprovantes
               </p>
 
               <div className="mt-1.5 flex flex-col gap-2">
@@ -2493,6 +2880,27 @@ export default function FilaDoCaixaPage() {
                   </span>
                   <Printer className="h-4 w-4 shrink-0" aria-hidden />
                 </button>
+
+                {lastPaid.liquidacao.comprovanteConferencia && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrint("CONFERENCIA")}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-emerald-600 px-4 py-3 text-left text-white shadow-lg shadow-emerald-600/20 transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Receipt className="h-4 w-4 shrink-0" aria-hidden />
+                      <span>
+                        <span className="block text-xs font-bold uppercase tracking-wide">
+                          Comprovante de conferência
+                        </span>
+                        <span className="block text-[10px] font-medium text-emerald-100/90">
+                          Recibo Interno · balcão · sem SEFAZ
+                        </span>
+                      </span>
+                    </span>
+                    <Printer className="h-4 w-4 shrink-0" aria-hidden />
+                  </button>
+                )}
               </div>
 
               <button
@@ -2505,7 +2913,8 @@ export default function FilaDoCaixaPage() {
 
               <p className="mt-2 text-center text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">
                 As vias são impressas em bobina térmica de 80 mm. A via do
-                galpão não exibe valores.
+                galpão não exibe valores. A baixa de estoque e o lançamento
+                financeiro são registrados em qualquer tipo de emissão.
               </p>
             </div>
           </div>
@@ -2671,6 +3080,11 @@ export default function FilaDoCaixaPage() {
       {/* Área de impressão: via do galpão */}
       {lastPaid && printRequest?.via === "GALPAO" && (
         <WarehouseReceipt paid={lastPaid} />
+      )}
+
+      {/* Área de impressão: comprovante de conferência do Recibo Interno */}
+      {lastPaid && printRequest?.via === "CONFERENCIA" && (
+        <ConferenceReceipt paid={lastPaid} />
       )}
     </>
   );
