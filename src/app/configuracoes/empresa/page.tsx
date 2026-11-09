@@ -456,7 +456,7 @@ export default function ConfiguracoesEmpresaPage() {
                 {upgradeSolicitado.motivo}
               </p>
               <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                Fale com a BCTech para liberar novos acessos para sua loja.
+                Fale com a BritosCode para liberar novos acessos para sua loja.
               </p>
               <div className="mt-6 flex justify-end gap-2">
                 <button
@@ -468,13 +468,13 @@ export default function ConfiguracoesEmpresaPage() {
                 </button>
                 <a
                   href={`https://wa.me/5511972646617?text=${encodeURIComponent(
-                    `Olá, gostaria de fazer upgrade para o plano ${upgradeSolicitado.planoSugerido ? PLANOS[upgradeSolicitado.planoSugerido].nome : "BCTech"}.`,
+                    `Olá, gostaria de fazer upgrade para o plano ${upgradeSolicitado.planoSugerido ? PLANOS[upgradeSolicitado.planoSugerido].nome : "BritosCode"}.`,
                   )}`}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700"
                 >
-                  Falar com a BCTech
+                  Falar com a BritosCode
                 </a>
               </div>
             </section>

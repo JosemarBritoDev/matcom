@@ -34,23 +34,25 @@ import {
   UserCog,
   Users,
   Wallet,
+  Zap,
   X,
 } from "lucide-react";
 
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { resolverSessaoAtiva } from "@/lib/session";
+import {
+  resolverSessaoAtiva,
+  type PapelSessao,
+} from "@/lib/session";
+import { carregarTenantMock } from "@/lib/tenant-admin-mock";
+import type { PlanoTenant } from "@/lib/permissions";
 
-export type EmployeeRole =
-  | "SUPER_ADMIN"
-  | "GERENTE_LOJA"
-  | "OPERADOR_CAIXA"
-  | "FINANCEIRO"
-  | "OPERACIONAL_VENDAS";
+export type EmployeeRole = PapelSessao;
 
 export interface TenantBranding {
   name: string;
   logoUrl?: string | null;
+  plan?: PlanoTenant;
 }
 
 export interface CurrentUser {
@@ -82,10 +84,55 @@ interface MenuGroup {
 const ROLE_LABELS: Record<EmployeeRole, string> = {
   SUPER_ADMIN: "Super Admin",
   GERENTE_LOJA: "Gerente da Loja",
+  VENDEDOR: "Vendedor",
+  CAIXA: "Caixa",
   OPERADOR_CAIXA: "Operador de Caixa",
+  ALMOXARIFE: "Almoxarife",
+  LOGISTICA: "Logística",
   FINANCEIRO: "Financeiro",
+  COMPRADOR: "Comprador",
   OPERACIONAL_VENDAS: "Operacional de Vendas",
 };
+
+const QUICK_LINKS: Array<MenuLink & { roles: readonly EmployeeRole[] }> = [
+  {
+    label: "Super Admin",
+    href: "/admin",
+    icon: ShieldCheck,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    label: "PDV Balcão",
+    href: "/vendas/pdv",
+    icon: Store,
+    roles: [
+      "SUPER_ADMIN",
+      "GERENTE_LOJA",
+      "VENDEDOR",
+      "CAIXA",
+      "OPERADOR_CAIXA",
+      "OPERACIONAL_VENDAS",
+    ],
+  },
+  {
+    label: "Expedição",
+    href: "/logistica/expedicao",
+    icon: Truck,
+    roles: ["SUPER_ADMIN", "GERENTE_LOJA", "ALMOXARIFE", "LOGISTICA"],
+  },
+  {
+    label: "Fiscal SEFAZ",
+    href: "/fiscal/nfe",
+    icon: FileText,
+    roles: ["SUPER_ADMIN", "GERENTE_LOJA", "FINANCEIRO"],
+  },
+  {
+    label: "Configurações",
+    href: "/configuracoes/empresa",
+    icon: Settings,
+    roles: ["SUPER_ADMIN", "GERENTE_LOJA"],
+  },
+];
 
 const MENU_GROUPS: MenuGroup[] = [
   {
@@ -255,15 +302,72 @@ export function Header({
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileGroup, setMobileGroup] = useState<string | null>(null);
+  const [planoTenant, setPlanoTenant] = useState<PlanoTenant | null>(
+    tenant.plan ?? null,
+  );
+  const [erroPlano, setErroPlano] = useState<string | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const { isHelpOpen, openHelp, closeHelp } = useKeyboardShortcuts();
 
   const isManager = isManagerRole(usuario.role);
-  const visibleGroups = MENU_GROUPS.filter(
-    (group) =>
-      (!group.managerOnly || isManager) &&
-      (!group.superAdminOnly || usuario.role === "SUPER_ADMIN"),
+  const quickLinks = QUICK_LINKS.filter((link) =>
+    link.roles.includes(usuario.role),
   );
+  const visibleGroups = [
+    ...(quickLinks.length > 0
+      ? [
+          {
+            label: "Atalhos rápidos",
+            icon: Zap,
+            items: quickLinks,
+          },
+        ]
+      : []),
+    ...MENU_GROUPS.filter(
+      (group) =>
+        (!group.managerOnly || isManager) &&
+        (!group.superAdminOnly || usuario.role === "SUPER_ADMIN"),
+    ),
+  ];
+
+  useEffect(() => {
+    if (tenant.plan) {
+      setPlanoTenant(tenant.plan);
+      setErroPlano(null);
+      return;
+    }
+
+    if (!sessao) {
+      setPlanoTenant(null);
+      return;
+    }
+
+    function atualizarPlano() {
+      if (!sessao) {
+        setPlanoTenant(null);
+        return;
+      }
+
+      try {
+        setPlanoTenant(
+          carregarTenantMock(sessao, sessao.tenantId)?.plano ?? null,
+        );
+        setErroPlano(null);
+      } catch (error) {
+        setPlanoTenant(null);
+        setErroPlano(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar o plano do tenant.",
+        );
+      }
+    }
+
+    atualizarPlano();
+    window.addEventListener("matcom:tenants-updated", atualizarPlano);
+    return () =>
+      window.removeEventListener("matcom:tenants-updated", atualizarPlano);
+  }, [sessao, tenant.plan]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent | TouchEvent) {
@@ -332,8 +436,23 @@ export function Header({
             <span className="max-w-[10rem] truncate text-sm font-bold tracking-tight text-zinc-900 sm:max-w-[14rem] sm:text-base dark:text-zinc-50">
               {tenant.name}
             </span>
-            <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-              MatCom SaaS
+            <span className="mt-0.5 flex flex-wrap items-center gap-1">
+              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                MatCom SaaS
+              </span>
+              {planoTenant && (
+                <span className="inline-flex w-fit items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300">
+                  Plano {planoTenant}
+                </span>
+              )}
+              {erroPlano && (
+                <span
+                  title={erroPlano}
+                  className="inline-flex w-fit items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                >
+                  Plano indisponível
+                </span>
+              )}
             </span>
           </span>
         </Link>

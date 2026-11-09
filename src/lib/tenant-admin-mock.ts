@@ -164,4 +164,5 @@ export function salvarTenantsMock(
   }
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(validos));
+  window.dispatchEvent(new Event("matcom:tenants-updated"));
 }

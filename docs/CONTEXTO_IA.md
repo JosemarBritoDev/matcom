@@ -140,6 +140,15 @@ matcom/
 - O Painel Fiscal SEFAZ apresentado no ambiente de desenvolvimento usa dados
   simulados; não transmite XML nem acessa certificado ou serviço externo.
 
+### 2.7 DRE gerencial demonstrativa
+
+- A rota `/financeiro/dre` permite acesso somente aos papéis
+  `FINANCEIRO`, `GERENTE_LOJA` e `SUPER_ADMIN`.
+- Enquanto os pedidos e lançamentos financeiros não estiverem conectados à
+  persistência da DRE, a tela identifica seus valores como demonstrativos e
+  limita os dados de exemplo ao tenant `tenant-matcom`.
+- Os cálculos de lucro e margem reutilizam a função pura `calcularDre`.
+
 ---
 
 ## 3. Modelo de dados (Prisma)

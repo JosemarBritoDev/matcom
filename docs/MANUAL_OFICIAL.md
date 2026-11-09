@@ -367,7 +367,7 @@ Os links abaixo usam a rota relativa do MatCom. Em produção, substitua `http:/
 | Gestão de Clientes & Crédito | `OPERACIONAL_VENDAS`, Administrativo, `GERENTE_LOJA` | Cadastrar e editar clientes, concluir endereço para entrega, analisar crediário e solicitar aprovação de perfil Atacado | [http://localhost:3000/vendas/clientes](http://localhost:3000/vendas/clientes) | [https://matcom.vercel.app/vendas/clientes](https://matcom.vercel.app/vendas/clientes) |
 | Entrada de NF-e & Compras | Estoque / Suprimentos, `FINANCEIRO`, `GERENTE_LOJA` | Importar XML de fornecedores, realizar De-Para, converter palete/caixa em sacos/unidades, recalcular custo médio e lançar estoque | [http://localhost:3000/compras/nfe](http://localhost:3000/compras/nfe) | [https://matcom.vercel.app/compras/nfe](https://matcom.vercel.app/compras/nfe) |
 | Painel Fiscal SEFAZ & Lote Contábil | `FINANCEIRO`, `GERENTE_LOJA`, `SUPER_ADMIN` | Consultar documentos fiscais do tenant e gerar ZIP demonstrativo mensal, quando `emissaoFiscalSefaz` estiver ativa | [http://localhost:3000/fiscal/nfe](http://localhost:3000/fiscal/nfe) | Bloqueado até integrar autenticação e serviço fiscal real |
-| Financeiro & DRE Gerencial | `FINANCEIRO`, Diretoria, `GERENTE_LOJA`, `SUPER_ADMIN` | Controlar contas de NF-e/despesas, títulos de crediário/cartões, liquidações, fluxo e DRE simplificada | [http://localhost:3000/financeiro/contas](http://localhost:3000/financeiro/contas) | [https://matcom.vercel.app/financeiro/contas](https://matcom.vercel.app/financeiro/contas) |
+| Financeiro & DRE Gerencial | `FINANCEIRO`, Diretoria, `GERENTE_LOJA`, `SUPER_ADMIN` | Controlar contas de NF-e/despesas, títulos de crediário/cartões, liquidações, fluxo e DRE simplificada | [http://localhost:3000/financeiro/contas](http://localhost:3000/financeiro/contas) · [DRE demonstrativa](http://localhost:3000/financeiro/dre) | [https://matcom.vercel.app/financeiro/contas](https://matcom.vercel.app/financeiro/contas) |
 
 ### 11.3 Links rápidos para navegação local
 
@@ -376,7 +376,8 @@ Os links abaixo usam a rota relativa do MatCom. Em produção, substitua `http:/
 - [Aprovações do Gerente](http://localhost:3000/gerencia/aprovacoes)
 - [Gestão de Clientes](http://localhost:3000/vendas/clientes)
 - [Entrada de NF-e e Compras](http://localhost:3000/compras/nfe)
-- [Contas e DRE Financeiro](http://localhost:3000/financeiro/contas)
+- [Contas Financeiras](http://localhost:3000/financeiro/contas)
+- [DRE Gerencial demonstrativa](http://localhost:3000/financeiro/dre)
 - [Prisma Studio — Auditoria do Banco](http://localhost:5555)
 - Use para decisões de compra e concessão de atacado.
 
