@@ -77,8 +77,11 @@ O **MatCom** é um SaaS multi-tenant de gestão para lojas de materiais de const
 - **Prisma como única camada de acesso ao banco.** Proibido SQL solto sem justificativa documentada.
 - **Validação na borda** com Zod (previsto) antes de qualquer escrita.
 - **Multi-tenancy por coluna** (`tenantId`) com filtragem obrigatória em todas as queries.
-- **Sessão mock de desenvolvimento** centralizada em `src/lib/session.ts`; o
-  ambiente de produção falha fechado até a integração de autenticação real.
+- **Sessão mock de desenvolvimento** centralizada em `src/lib/session.ts`.
+  Em produção, a sessão mock só é liberada quando
+  `NEXT_PUBLIC_DEMO_MODE=true` (modo demonstração/QA na Vercel); sem a flag o
+  ambiente falha fechado até a integração de autenticação real. O Header exibe
+  o badge `[Modo Demo Vercel]` enquanto a flag estiver ativa.
 - **Persistência administrativa mock** usa `localStorage` somente para
   demonstração local; não substitui Prisma nem autoriza operações em produção.
 - **Banco em Supabase** usando pooler para runtime e conexão direta para migrations.
@@ -242,6 +245,41 @@ Estas regras não podem ser quebradas por nenhuma implementação:
 
 8. **Assinatura obrigatória**
    O rodapé de todas as telas deve exibir: `Criado por BCTech | Josemar Brito | Whatsapp 11972646617`.
+
+9. **Precificação no PDV**
+   - O PDV sempre inicia na tabela de **Varejo**.
+   - O **Atacado** só é habilitado — item a item ou na venda inteira — quando o
+     cliente possui `pricingTier = ATACADO`, `tierStatus = APROVADO` e cadastro
+     `COMPLETO`.
+   - Cadastro simplificado, tabela Varejo, aprovação `PENDENTE` ou `REJEITADO`
+     mantêm a seleção travada no Varejo.
+
+10. **Estoque e flags logísticas no PDV**
+    - Indicadores visuais: 🟢 estoque OK, 🟡 estoque baixo, 🔴 zerado ou
+      insuficiente para a quantidade pedida.
+    - **Retirada imediata** acima do saldo exige PIN do Gerente e dispara alerta
+      automático para o módulo de Compras.
+    - **Entrega programada** sem saldo conclui a venda com a flag
+      `ENTREGA_AGUARDANDO_PRODUTO` e notifica Logística e Compras.
+
+11. **Precificação bidirecional no cadastro de produtos**
+    - Alterar custo ou preço de varejo recalcula a **Margem Target (%)**.
+    - Alterar a **Margem Target (%)** recalcula o **preço de varejo**.
+    - A margem de atacado é exibida como indicador derivado sobre o custo.
+
+12. **Dados fiscais e entradas de estoque**
+    - O cadastro mantém NCM, CEST, CSOSN/CST, origem da mercadoria e alíquotas
+      de saída de ICMS, PIS e COFINS.
+    - Entrada oficial via XML usa **custo efetivo** =
+      custo bruto + IPI + ICMS-ST + frete/despesas.
+    - Entrada por controle físico aceita quantidade e custo direto, sem
+      exigência de chave fiscal XML.
+
+13. **Modo demonstração na Vercel**
+    - `NEXT_PUBLIC_DEMO_MODE=true` libera a sessão mock e a navegação de
+      demonstração em produção.
+    - A flag não substitui autenticação real: deve ser usada apenas para
+      demonstração/QA e removida em ambientes com dados reais.
 
 ---
 

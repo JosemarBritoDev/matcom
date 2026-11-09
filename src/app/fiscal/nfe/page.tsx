@@ -32,6 +32,7 @@ import {
 } from "@/lib/tenant-admin-mock";
 import {
   filtrarPorTenantAtivo,
+  modoDemoAtivo,
   podeAcessarTenant,
   resolverSessaoAtiva,
 } from "@/lib/session";
@@ -148,12 +149,19 @@ export default function FiscalNfePage() {
     }
   }, [sessao]);
 
-  const acesso = tenant
+  const acessoBase = tenant
     ? verificarAcessoModulo(
         converterFlagsParaModulos(tenant.featureFlags),
         "nfe",
       )
     : null;
+
+  // O modo demo libera a navegação de QA mesmo quando a flag comercial do
+  // módulo fiscal está desligada no tenant de demonstração.
+  const acesso =
+    acessoBase && modoDemoAtivo()
+      ? { ...acessoBase, permitido: true, motivo: null }
+      : acessoBase;
 
   const documentosTenant = useMemo(
     () => (sessao ? filtrarPorTenantAtivo(sessao, documentos) : []),

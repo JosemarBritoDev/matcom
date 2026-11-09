@@ -59,6 +59,10 @@ DATABASE_URL="postgresql://postgres.<PROJECT_REF>:<SENHA>@aws-0-<REGIAO>.pooler.
 
 # Conexão direta (migrations e introspecção)
 DIRECT_URL="postgresql://postgres.<PROJECT_REF>:<SENHA>@aws-0-<REGIAO>.pooler.supabase.com:5432/postgres"
+
+# Modo demonstração/QA: libera a sessão mock em produção.
+# Use "true" apenas em ambientes de demonstração. Padrão: ausente/false.
+NEXT_PUBLIC_DEMO_MODE="false"
 ```
 
 > A senha deve ser URL-encoded se contiver caracteres especiais (`@`, `#`, `/`, etc.).
@@ -255,6 +259,7 @@ npx prisma generate && npm run build
 | `NEXTAUTH_SECRET` | Todos (futuro) | Segredo forte quando a autenticação for implementada |
 | `NEXTAUTH_URL` | Todos (futuro) | URL pública da aplicação |
 | `NEXT_PUBLIC_APP_URL` | Todos (futuro) | URL pública usada pelo PWA/metadata |
+| `NEXT_PUBLIC_DEMO_MODE` | Apenas Preview/Demo | `"true"` libera a sessão mock e o selo `[Modo Demo Vercel]`; mantenha `"false"` ou ausente em produção real |
 
 Regras:
 

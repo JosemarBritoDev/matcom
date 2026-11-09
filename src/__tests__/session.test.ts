@@ -10,14 +10,35 @@ import {
 } from "@/lib/tenant-admin-mock";
 import {
   filtrarPorTenantAtivo,
+  modoDemoAtivo,
   podeAdministrarSaas,
   podeAcessarTenant,
   resolverSessaoAtiva,
+  ROTULO_MODO_DEMO,
   type SessaoAtiva,
 } from "@/lib/session";
 
+const DEMO_MODE_ORIGINAL = process.env.NEXT_PUBLIC_DEMO_MODE;
+const NODE_ENV_ORIGINAL = process.env.NODE_ENV ?? "test";
+
+/** `NODE_ENV` é tipado como readonly; os testes precisam simulá-lo. */
+function definirNodeEnv(valor: string) {
+  Object.defineProperty(process.env, "NODE_ENV", {
+    value: valor,
+    configurable: true,
+    writable: true,
+  });
+}
+
 afterEach(() => {
   window.localStorage.clear();
+  definirNodeEnv(NODE_ENV_ORIGINAL);
+
+  if (DEMO_MODE_ORIGINAL === undefined) {
+    delete process.env.NEXT_PUBLIC_DEMO_MODE;
+  } else {
+    process.env.NEXT_PUBLIC_DEMO_MODE = DEMO_MODE_ORIGINAL;
+  }
 });
 
 describe("Sessão e persistência local demonstrativa", () => {
@@ -34,8 +55,10 @@ describe("Sessão e persistência local demonstrativa", () => {
       "NODE_ENV",
       "production",
     );
+    delete process.env.NEXT_PUBLIC_DEMO_MODE;
 
     try {
+      expect(modoDemoAtivo()).toBe(false);
       expect(resolverSessaoAtiva()).toBeNull();
       expect(
         podeAdministrarSaas({
@@ -46,9 +69,43 @@ describe("Sessão e persistência local demonstrativa", () => {
           origem: "mock",
         }),
       ).toBe(false);
+      expect(
+        podeAcessarTenant(
+          {
+            userId: "dev-admin",
+            tenantId: "tenant-1",
+            name: "Mock",
+            role: "SUPER_ADMIN",
+            origem: "mock",
+          },
+          "tenant-1",
+        ),
+      ).toBe(false);
     } finally {
       ambiente.restore();
     }
+  });
+
+  it("libera a sessão mock em produção quando NEXT_PUBLIC_DEMO_MODE=true", () => {
+    definirNodeEnv("production");
+    process.env.NEXT_PUBLIC_DEMO_MODE = "true";
+
+    const sessao = resolverSessaoAtiva();
+
+    expect(modoDemoAtivo()).toBe(true);
+    expect(ROTULO_MODO_DEMO).toBe("[Modo Demo Vercel]");
+    expect(sessao?.role).toBe("SUPER_ADMIN");
+    expect(sessao?.origem).toBe("mock");
+    expect(podeAdministrarSaas(sessao)).toBe(true);
+    expect(podeAcessarTenant(sessao, "tenant-matcom")).toBe(true);
+  });
+
+  it("não libera a demonstração quando a flag tem valor diferente de true", () => {
+    definirNodeEnv("production");
+    process.env.NEXT_PUBLIC_DEMO_MODE = "1";
+
+    expect(modoDemoAtivo()).toBe(false);
+    expect(resolverSessaoAtiva()).toBeNull();
   });
 
   it("restringe leitura de tenant ao tenant ativo para usuários da loja", () => {

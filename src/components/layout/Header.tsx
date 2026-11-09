@@ -13,6 +13,7 @@ import {
   FileInput,
   FileSpreadsheet,
   FileText,
+  FlaskConical,
   Keyboard,
   LogOut,
   Menu,
@@ -41,7 +42,9 @@ import {
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
+  modoDemoAtivo,
   resolverSessaoAtiva,
+  ROTULO_MODO_DEMO,
   type PapelSessao,
 } from "@/lib/session";
 import { carregarTenantMock } from "@/lib/tenant-admin-mock";
@@ -288,6 +291,7 @@ export function Header({
   user,
 }: HeaderProps) {
   const sessao = resolverSessaoAtiva();
+  const demoAtivo = modoDemoAtivo();
   const usuario =
     user ??
     (sessao
@@ -443,6 +447,15 @@ export function Header({
               {planoTenant && (
                 <span className="inline-flex w-fit items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300">
                   Plano {planoTenant}
+                </span>
+              )}
+              {demoAtivo && (
+                <span
+                  title="Demonstração com dados simulados. Nenhuma operação afeta dados reais."
+                  className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                >
+                  <FlaskConical className="h-3 w-3" aria-hidden />
+                  {ROTULO_MODO_DEMO}
                 </span>
               )}
               {erroPlano && (

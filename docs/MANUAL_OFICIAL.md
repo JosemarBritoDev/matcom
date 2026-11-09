@@ -139,6 +139,13 @@ O sistema possui:
 - O preço de atacado pode ser aplicado automaticamente a partir da quantidade mínima, desde que o cliente esteja aprovado.
 - Sempre confira a quantidade mínima antes de fechar o pedido.
 
+### 4.5 Comportamento do PDV
+
+- O PDV **sempre abre no Varejo**, mesmo para cliente com Atacado aprovado.
+- Com Atacado aprovado e cadastro completo, o vendedor pode alternar **item a item** ou aplicar o Atacado na **venda inteira**.
+- Cliente com cadastro simplificado, tabela Varejo, solicitação pendente ou rejeitada permanece **travado no Varejo**.
+- O sistema exibe o motivo da trava ao vendedor, sem permitir burlar a regra pela interface.
+
 ---
 
 ## 5. Trava de aprovação do Gerente
@@ -316,6 +323,9 @@ O MatCom pode ser instalado no celular ou tablet como aplicativo (PWA), permitin
 - Respeite o **estoque mínimo** para reposição.
 - Produtos com unidade secundária (ex.: caixa → m², saco → kg) usam fator de conversão.
 - Toda movimentação deve ter origem e responsável.
+- No PDV, o saldo aparece com indicador: 🟢 OK · 🟡 baixo · 🔴 zerado/insuficiente.
+- **Retirada imediata sem saldo** exige PIN do Gerente e gera alerta ao Compras.
+- **Entrega programada sem saldo** conclui com a flag **Entrega Aguardando Produto** e notifica Logística e Compras.
 
 ### 9.3 Logística e entregas
 
@@ -324,6 +334,34 @@ O MatCom pode ser instalado no celular ou tablet como aplicativo (PWA), permitin
 3. A logística organiza rota e confirma a entrega.
 4. O cliente assina o comprovante.
 5. O sistema registra a conclusão.
+
+### 9.4 Entradas de estoque no cadastro de produtos
+
+- **Entrada oficial via XML:** informe a chave de acesso da NF-e, fornecedor,
+  quantidade, custo bruto, IPI, ICMS-ST e frete/despesas. O sistema calcula o
+  **custo efetivo** (custo bruto + IPI + ICMS-ST + frete/despesas) e atualiza
+  custo e saldo.
+- **Entrada por controle físico:** informe apenas quantidade e custo direto,
+  sem exigência de chave fiscal XML.
+- Toda entrada é registrada no log de auditoria com data, produto, quantidade
+  e custo aplicado.
+
+### 9.5 Dados fiscais do produto
+
+- A aba **Tributação & Dados Fiscais** do cadastro de produtos concentra NCM,
+  CEST, CSOSN/CST, origem da mercadoria e alíquotas de saída de ICMS, PIS e
+  COFINS.
+- Esses dados alimentam a emissão fiscal e devem ser conferidos antes de
+  transmitir a NF-e.
+
+### 9.6 Precificação bidirecional
+
+- Alterar o **Preço de Custo** ou o **Preço de Varejo** recalcula
+  automaticamente a **Margem Target (%)**.
+- Alterar a **Margem Target (%)** recalcula automaticamente o **Preço de
+  Varejo**.
+- A margem de atacado é exibida separadamente como indicador derivado sobre o
+  custo.
 
 ---
 
@@ -354,6 +392,9 @@ O MatCom pode ser instalado no celular ou tablet como aplicativo (PWA), permitin
 - **Local:** `http://localhost:3000`
 - **Produção:** `https://matcom.vercel.app`
 - **Auditoria do banco de dados:** execute `npx prisma studio` e acesse `http://localhost:5555`.
+- **Modo demonstração na Vercel:** com `NEXT_PUBLIC_DEMO_MODE=true`, a sessão
+  mock é liberada em produção e o Header exibe o selo `[Modo Demo Vercel]`.
+  Use apenas para demonstração/QA, nunca com dados reais de loja.
 
 Os links abaixo usam a rota relativa do MatCom. Em produção, substitua `http://localhost:3000` pela URL de produção configurada no ambiente da loja ou pelo domínio oficial informado pela BCTech.
 
@@ -393,6 +434,11 @@ Os links abaixo usam a rota relativa do MatCom. Em produção, substitua `http:/
 ---
 
 ## 11. Perguntas frequentes
+
+**O que significa o selo [Modo Demo Vercel]?**
+Indica que o sistema está usando sessão mock e dados simulados para
+demonstração/QA. Nenhuma operação deve ser tratada como real enquanto o selo
+estiver visível.
 
 **O vendedor pode aplicar atacado sem aprovação?**
 Não. O sistema bloqueia a aplicação até o Gerente aprovar.

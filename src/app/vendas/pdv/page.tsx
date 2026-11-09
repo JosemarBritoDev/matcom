@@ -5,11 +5,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
+  AlertTriangle,
   ArrowLeftRight,
+  Bell,
   CheckCircle2,
   ChevronDown,
   ClipboardList,
   Clock,
+  KeyRound,
   Lock,
   Minus,
   PackageSearch,
@@ -18,6 +21,7 @@ import {
   ScanBarcode,
   Search,
   Send,
+  ShieldCheck,
   ShoppingCart,
   Store,
   Trash2,
@@ -28,6 +32,14 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+
+import {
+  avaliarDisponibilidadeVenda,
+  avaliarLiberacaoAtacado,
+  classificarEstoque,
+  validarLiberacaoEstoque,
+  type StatusEstoque,
+} from "@/lib/regras-negocio";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Tipos                                    */
@@ -56,6 +68,7 @@ interface Product {
   name: string;
   imagemUrl: string;
   stock: number;
+  minStock: number;
   unit: ProductUnit;
   retailPrice: number;
   wholesalePrice: number;
@@ -84,6 +97,9 @@ const SELLERS = [
 ] as const;
 
 const MAX_DISCOUNT = 10;
+
+/** PIN demonstrativo do Gerente para liberações operacionais no PDV. */
+const PIN_GERENTE_DEMO = "1975";
 
 const CUSTOMERS: Customer[] = [
   {
@@ -151,6 +167,7 @@ const PRODUCTS: Product[] = [
     name: "Cimento CP II 50 kg",
     imagemUrl: "/products/cimento.svg",
     stock: 320,
+    minStock: 80,
     unit: "saco",
     retailPrice: 38.9,
     wholesalePrice: 34.5,
@@ -163,6 +180,7 @@ const PRODUCTS: Product[] = [
     name: "Areia média lavada",
     imagemUrl: "/products/areia.svg",
     stock: 18.5,
+    minStock: 5,
     unit: "m³",
     retailPrice: 129.9,
     wholesalePrice: 112,
@@ -175,6 +193,7 @@ const PRODUCTS: Product[] = [
     name: "Bloco de concreto 14x19x39",
     imagemUrl: "/products/bloco.svg",
     stock: 4800,
+    minStock: 500,
     unit: "un",
     retailPrice: 2.75,
     wholesalePrice: 2.35,
@@ -187,6 +206,7 @@ const PRODUCTS: Product[] = [
     name: "Tinta acrílica premium 18 L",
     imagemUrl: "/products/tinta.svg",
     stock: 42,
+    minStock: 10,
     unit: "lata",
     retailPrice: 289.9,
     wholesalePrice: 259,
@@ -199,6 +219,7 @@ const PRODUCTS: Product[] = [
     name: "Porcelanato acetinado 80x80 cm",
     imagemUrl: "/products/porcelanato.svg",
     stock: 96,
+    minStock: 20,
     unit: "caixa",
     retailPrice: 159.9,
     wholesalePrice: 142,
@@ -211,6 +232,7 @@ const PRODUCTS: Product[] = [
     name: "Argamassa AC-III 20 kg",
     imagemUrl: "/products/cimento.svg",
     stock: 210,
+    minStock: 50,
     unit: "saco",
     retailPrice: 42.5,
     wholesalePrice: 37.9,
@@ -223,6 +245,7 @@ const PRODUCTS: Product[] = [
     name: "Vergalhão CA-50 10 mm 12 m",
     imagemUrl: "/products/aco.svg",
     stock: 340,
+    minStock: 40,
     unit: "un",
     retailPrice: 68.9,
     wholesalePrice: 62,
@@ -235,6 +258,7 @@ const PRODUCTS: Product[] = [
     name: "Tela soldada Q-138",
     imagemUrl: "/products/aco.svg",
     stock: 75,
+    minStock: 15,
     unit: "un",
     retailPrice: 189.9,
     wholesalePrice: 172,
@@ -308,6 +332,59 @@ function SimplifiedCustomerBadge() {
   );
 }
 
+const STOCK_STATUS_META: Record<
+  StatusEstoque,
+  { emoji: string; label: string; className: string }
+> = {
+  OK: {
+    emoji: "🟢",
+    label: "Estoque OK",
+    className: "text-emerald-600 dark:text-emerald-400",
+  },
+  BAIXO: {
+    emoji: "🟡",
+    label: "Estoque baixo",
+    className: "text-amber-600 dark:text-amber-400",
+  },
+  ZERADO: {
+    emoji: "🔴",
+    label: "Sem estoque",
+    className: "text-red-600 dark:text-red-400",
+  },
+  INSUFICIENTE: {
+    emoji: "🔴",
+    label: "Estoque insuficiente",
+    className: "text-red-600 dark:text-red-400",
+  },
+};
+
+function StockIndicator({
+  saldo,
+  minimo,
+  quantidadeSolicitada,
+  unidade,
+}: {
+  saldo: number;
+  minimo: number;
+  quantidadeSolicitada?: number;
+  unidade: string;
+}) {
+  const status = classificarEstoque({ saldo, minimo, quantidadeSolicitada });
+  const meta = STOCK_STATUS_META[status];
+
+  return (
+    <span
+      title={`${meta.label}: ${formatQuantity(saldo)} ${unidade} disponível`}
+      className={`inline-flex items-center gap-1 font-medium ${meta.className}`}
+    >
+      <span aria-hidden>{meta.emoji}</span>
+      <span>
+        Estoque: {formatQuantity(saldo)} {unidade}
+      </span>
+    </span>
+  );
+}
+
 function CustomerTierBadge({ customer }: { customer: Customer }) {
   if (customer.tier === "VAREJO") {
     return (
@@ -347,15 +424,17 @@ function ItemTierToggle({
   tier,
   onToggle,
   disabled = false,
+  disabledReason,
 }: {
   tier: PricingTier;
   onToggle: () => void;
   disabled?: boolean;
+  disabledReason?: string;
 }) {
   if (disabled) {
     return (
       <span
-        title={SIMPLIFIED_CUSTOMER_LOCK.wholesale}
+        title={disabledReason ?? SIMPLIFIED_CUSTOMER_LOCK.wholesale}
         className="inline-flex cursor-not-allowed items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
       >
         <Lock className="h-3 w-3" aria-hidden />
@@ -368,14 +447,14 @@ function ItemTierToggle({
     <button
       type="button"
       onClick={onToggle}
-      title="Alternar entre Varejo e Atacado avulso"
+      title="Alternar entre Varejo e Atacado negociado"
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${
         tier === "ATACADO"
           ? "bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950/60 dark:text-violet-300 dark:hover:bg-violet-900/60"
           : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
       }`}
     >
-      {tier === "ATACADO" ? "Atacado avulso" : "Varejo"}
+      {tier === "ATACADO" ? "Atacado negociado" : "Varejo"}
       <ArrowLeftRight className="h-3 w-3" aria-hidden />
     </button>
   );
@@ -465,6 +544,21 @@ export default function PdvPage() {
   const [notes, setNotes] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [stockAuthOpen, setStockAuthOpen] = useState(false);
+  const [stockPin, setStockPin] = useState("");
+  const [stockAuthError, setStockAuthError] = useState<string | null>(null);
+  const [alertasCompras, setAlertasCompras] = useState<
+    Array<{
+      id: string;
+      produto: string;
+      solicitado: number;
+      disponivel: number;
+      unidade: string;
+    }>
+  >([]);
+  const [notificacaoLogistica, setNotificacaoLogistica] = useState(false);
+  const [flagEntregaAguardandoProduto, setFlagEntregaAguardandoProduto] =
+    useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -478,12 +572,17 @@ export default function PdvPage() {
   const isSimplified =
     selectedCustomer.registration === "CADASTRO_SIMPLIFICADO";
 
-  const defaultTier: PricingTier =
-    !isSimplified &&
-    selectedCustomer.tier === "ATACADO" &&
-    selectedCustomer.tierStatus === "APROVADO"
-      ? "ATACADO"
-      : "VAREJO";
+  const liberacaoAtacado = avaliarLiberacaoAtacado({
+    tabelaCliente: selectedCustomer.tier,
+    statusTabela: selectedCustomer.tierStatus,
+    tipoCadastro: isSimplified ? "SIMPLIFICADO" : "COMPLETO",
+  });
+
+  /**
+   * O PDV sempre carrega a tabela padrão do cadastro (Varejo). O Atacado é
+   * uma negociação opcional habilitada apenas com aprovação do Gerente.
+   */
+  const defaultTier: PricingTier = "VAREJO";
 
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -509,12 +608,16 @@ export default function PdvPage() {
   const hasAtacado = cart.some((item) => item.tier === "ATACADO");
   const hasInvalidQuantity = cart.some((item) => item.quantity <= 0);
   const canSubmit = cart.length > 0 && !hasInvalidQuantity;
-  const atacadoNeedsApproval =
-    hasAtacado &&
-    !(
-      selectedCustomer.tier === "ATACADO" &&
-      selectedCustomer.tierStatus === "APROVADO"
-    );
+  const atacadoNeedsApproval = hasAtacado && !liberacaoAtacado.liberado;
+
+  const itensComFaltaEstoque = cart.filter(
+    (item) => item.quantity > item.product.stock,
+  );
+  const faltaEstoque = itensComFaltaEstoque.length > 0;
+  const disponibilidade = avaliarDisponibilidadeVenda(
+    deliveryMode,
+    faltaEstoque,
+  );
 
   const allVarejo =
     cart.length > 0 && cart.every((item) => item.tier === "VAREJO");
@@ -583,6 +686,28 @@ export default function PdvPage() {
   }, [newCustomerOpen]);
 
   useEffect(() => {
+    if (!stockAuthOpen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setStockAuthOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [stockAuthOpen]);
+
+  useEffect(() => {
     if (isSimplified && deliveryMode !== "RETIRADA_IMEDIATA") {
       setDeliveryMode("RETIRADA_IMEDIATA");
     }
@@ -637,7 +762,7 @@ export default function PdvPage() {
   }
 
   function toggleItemTier(productId: string) {
-    if (isSimplified) {
+    if (!liberacaoAtacado.liberado) {
       return;
     }
 
@@ -654,7 +779,7 @@ export default function PdvPage() {
   }
 
   function applyTierToAll(tier: PricingTier) {
-    const safeTier: PricingTier = isSimplified ? "VAREJO" : tier;
+    const safeTier: PricingTier = liberacaoAtacado.liberado ? tier : "VAREJO";
 
     setCart((currentCart) =>
       currentCart.map((item) => ({ ...item, tier: safeTier })),
@@ -668,13 +793,65 @@ export default function PdvPage() {
     }
   }
 
+  function registrarAlertasEstoque() {
+    if (!faltaEstoque) {
+      setAlertasCompras([]);
+      setNotificacaoLogistica(false);
+      setFlagEntregaAguardandoProduto(false);
+      return;
+    }
+
+    setAlertasCompras(
+      itensComFaltaEstoque.map((item) => ({
+        id: item.product.id,
+        produto: item.product.name,
+        solicitado: item.quantity,
+        disponivel: item.product.stock,
+        unidade: item.product.unit,
+      })),
+    );
+    setNotificacaoLogistica(disponibilidade.notificarLogistica);
+    setFlagEntregaAguardandoProduto(
+      disponibilidade.flagPedido === "ENTREGA_AGUARDANDO_PRODUTO",
+    );
+  }
+
+  function concluirVenda() {
+    registrarAlertasEstoque();
+    setGeneratedAt(new Date());
+    setModalOpen(true);
+    setStockAuthOpen(false);
+    setStockPin("");
+    setStockAuthError(null);
+  }
+
   function handleGenerateOrder() {
     if (!canSubmit) {
       return;
     }
 
-    setGeneratedAt(new Date());
-    setModalOpen(true);
+    if (disponibilidade.exigeAutorizacaoGerente) {
+      setStockPin("");
+      setStockAuthError(null);
+      setStockAuthOpen(true);
+      return;
+    }
+
+    concluirVenda();
+  }
+
+  function handleAuthorizeStock() {
+    const resultado = validarLiberacaoEstoque({
+      pinInformado: stockPin,
+      pinGerente: PIN_GERENTE_DEMO,
+    });
+
+    if (!resultado.autorizada) {
+      setStockAuthError(resultado.motivo);
+      return;
+    }
+
+    concluirVenda();
   }
 
   function startNewSale() {
@@ -686,23 +863,22 @@ export default function PdvPage() {
     setGeneratedAt(null);
     setSearch("");
     setSearchOpen(false);
+    setAlertasCompras([]);
+    setNotificacaoLogistica(false);
+    setFlagEntregaAguardandoProduto(false);
+    setStockAuthOpen(false);
+    setStockPin("");
+    setStockAuthError(null);
     setDraftCode((currentCode) => currentCode + 1);
   }
 
   function selectCustomer(nextCustomer: Customer) {
     setCustomerId(nextCustomer.id);
 
-    const nextTier: PricingTier =
-      nextCustomer.registration === "CADASTRO_SIMPLIFICADO" ||
-      !(
-        nextCustomer.tier === "ATACADO" &&
-        nextCustomer.tierStatus === "APROVADO"
-      )
-        ? "VAREJO"
-        : "ATACADO";
-
+    // A troca de cliente sempre reinicia a comanda no Varejo. O Atacado só é
+    // habilitado manualmente quando houver aprovação do Gerente.
     setCart((currentCart) =>
-      currentCart.map((item) => ({ ...item, tier: nextTier })),
+      currentCart.map((item) => ({ ...item, tier: "VAREJO" })),
     );
 
     if (nextCustomer.registration === "CADASTRO_SIMPLIFICADO") {
@@ -917,6 +1093,15 @@ export default function PdvPage() {
                 <span>{SIMPLIFIED_CUSTOMER_LOCK.banner}</span>
               </p>
             )}
+
+            {!liberacaoAtacado.liberado &&
+              !isSimplified &&
+              selectedCustomer.tier === "ATACADO" && (
+                <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>{liberacaoAtacado.motivo}</span>
+                </p>
+              )}
           </section>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_370px] xl:items-start xl:gap-6">
@@ -1010,16 +1195,11 @@ export default function PdvPage() {
                                     <span aria-hidden>•</span>
                                     <span>Cód. {product.internalCode}</span>
                                     <span aria-hidden>•</span>
-                                    <span
-                                      className={
-                                        product.stock > 0
-                                          ? "font-medium text-emerald-600 dark:text-emerald-400"
-                                          : "font-medium text-red-600 dark:text-red-400"
-                                      }
-                                    >
-                                      Estoque: {formatQuantity(product.stock)}{" "}
-                                      {product.unit}
-                                    </span>
+                                    <StockIndicator
+                                      saldo={product.stock}
+                                      minimo={product.minStock}
+                                      unidade={product.unit}
+                                    />
                                   </span>
 
                                   <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
@@ -1097,33 +1277,35 @@ export default function PdvPage() {
                       <button
                         type="button"
                         onClick={() => applyTierToAll("ATACADO")}
-                        disabled={isSimplified}
+                        disabled={!liberacaoAtacado.liberado}
                         title={
-                          isSimplified
-                            ? SIMPLIFIED_CUSTOMER_LOCK.wholesale
-                            : "Aplicar Atacado avulso a todos os itens"
+                          liberacaoAtacado.liberado
+                            ? "Aplicar Atacado negociado a todos os itens"
+                            : liberacaoAtacado.motivo
                         }
                         className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                          isSimplified
+                          !liberacaoAtacado.liberado
                             ? "cursor-not-allowed text-zinc-400 opacity-50 dark:text-zinc-600"
                             : allAtacado
                               ? "bg-violet-600 text-white shadow-sm"
                               : "text-zinc-500 hover:text-violet-700 dark:text-zinc-400 dark:hover:text-violet-300"
                         }`}
                       >
-                        Atacado avulso
+                        Atacado negociado
                       </button>
                     </div>
 
-                    {isSimplified && (
-                      <p className="flex w-full items-start gap-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                        <Lock
-                          className="mt-0.5 h-3 w-3 shrink-0"
-                          aria-hidden
-                        />
-                        {SIMPLIFIED_CUSTOMER_LOCK.wholesale}
-                      </p>
-                    )}
+                    {!liberacaoAtacado.liberado &&
+                      (isSimplified ||
+                        selectedCustomer.tier === "ATACADO") && (
+                        <p className="flex w-full items-start gap-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                          <Lock
+                            className="mt-0.5 h-3 w-3 shrink-0"
+                            aria-hidden
+                          />
+                          {liberacaoAtacado.motivo}
+                        </p>
+                      )}
                   </div>
                 </div>
 
@@ -1204,6 +1386,14 @@ export default function PdvPage() {
                                       EAN {item.product.ean} ·{" "}
                                       {item.product.unit}
                                     </p>
+                                    <p className="mt-0.5 text-[11px]">
+                                      <StockIndicator
+                                        saldo={item.product.stock}
+                                        minimo={item.product.minStock}
+                                        quantidadeSolicitada={item.quantity}
+                                        unidade={item.product.unit}
+                                      />
+                                    </p>
                                   </div>
                                 </div>
                               </td>
@@ -1229,7 +1419,8 @@ export default function PdvPage() {
                               <td className="px-4 py-3">
                                 <ItemTierToggle
                                   tier={item.tier}
-                                  disabled={isSimplified}
+                                  disabled={!liberacaoAtacado.liberado}
+                                  disabledReason={liberacaoAtacado.motivo}
                                   onToggle={() =>
                                     toggleItemTier(item.product.id)
                                   }
@@ -1281,9 +1472,15 @@ export default function PdvPage() {
                                 {item.product.name}
                               </p>
                               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                EAN {item.product.ean} ·{" "}
-                                {formatQuantity(item.product.stock)}{" "}
-                                {item.product.unit} em estoque
+                                EAN {item.product.ean}
+                              </p>
+                              <p className="mt-0.5 text-[11px]">
+                                <StockIndicator
+                                  saldo={item.product.stock}
+                                  minimo={item.product.minStock}
+                                  quantidadeSolicitada={item.quantity}
+                                  unidade={item.product.unit}
+                                />
                               </p>
                             </div>
 
@@ -1300,7 +1497,8 @@ export default function PdvPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <ItemTierToggle
                               tier={item.tier}
-                              disabled={isSimplified}
+                              disabled={!liberacaoAtacado.liberado}
+                              disabledReason={liberacaoAtacado.motivo}
                               onToggle={() => toggleItemTier(item.product.id)}
                             />
                             <QuantityControl
@@ -1541,6 +1739,38 @@ export default function PdvPage() {
                     />
                   </div>
 
+                  {faltaEstoque && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                      <p className="flex items-start gap-1.5 font-semibold">
+                        <AlertTriangle
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                          aria-hidden
+                        />
+                        {deliveryMode === "RETIRADA_IMEDIATA"
+                          ? "Retirada imediata sem saldo suficiente. É obrigatório liberar com o PIN do Gerente."
+                          : "Entrega programada com falta de estoque. O pedido será marcado como \"Entrega Aguardando Produto\"."}
+                      </p>
+                      <ul className="mt-1.5 space-y-1 pl-5">
+                        {itensComFaltaEstoque.map((item) => (
+                          <li key={item.product.id} className="list-disc">
+                            {item.product.name}: solicitado{" "}
+                            {formatQuantity(item.quantity)} {item.product.unit},
+                            disponível {formatQuantity(item.product.stock)}{" "}
+                            {item.product.unit}.
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1.5 flex items-center gap-1 font-medium">
+                        <Bell className="h-3 w-3 shrink-0" aria-hidden />
+                        Alerta automático de reposição enviado ao módulo de
+                        Compras
+                        {deliveryMode === "ENTREGA_PENDENTE"
+                          ? " e à Logística."
+                          : "."}
+                      </p>
+                    </div>
+                  )}
+
                   {atacadoNeedsApproval && (
                     <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
                       <Clock
@@ -1558,8 +1788,14 @@ export default function PdvPage() {
                     disabled={!canSubmit}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-emerald-600/20 transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300 disabled:shadow-none dark:disabled:bg-emerald-900/50"
                   >
-                    <Send className="h-4 w-4" aria-hidden />
-                    Gerar comanda / Enviar ao caixa
+                    {disponibilidade.exigeAutorizacaoGerente ? (
+                      <KeyRound className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <Send className="h-4 w-4" aria-hidden />
+                    )}
+                    {disponibilidade.exigeAutorizacaoGerente
+                      ? "Autorizar com Gerente e gerar"
+                      : "Gerar comanda / Enviar ao caixa"}
                   </button>
 
                   <p className="mt-2 text-center text-[10px] leading-relaxed text-zinc-500 dark:text-zinc-400">
@@ -1745,6 +1981,128 @@ export default function PdvPage() {
         </div>
       )}
 
+      {/* Modal de liberação do Gerente para retirada sem estoque */}
+      {stockAuthOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stock-auth-title"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-zinc-950/60 p-4 backdrop-blur-sm print:hidden sm:items-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setStockAuthOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-start justify-between gap-3 border-b border-zinc-200 p-5 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                  <ShieldCheck className="h-5 w-5" aria-hidden />
+                </span>
+                <div>
+                  <h2
+                    id="stock-auth-title"
+                    className="text-base font-bold tracking-tight"
+                  >
+                    Liberação do Gerente
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Retirada imediata acima do saldo disponível
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setStockAuthOpen(false)}
+                aria-label="Fechar modal de liberação"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleAuthorizeStock();
+              }}
+            >
+              <div className="space-y-3 p-5">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                  A retirada imediata possui itens sem saldo suficiente. Informe
+                  o PIN do Gerente para autorizar a operação. O módulo de
+                  Compras será alertado automaticamente para reposição.
+                </p>
+
+                <div>
+                  <label
+                    htmlFor="stock-auth-pin"
+                    className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                  >
+                    PIN do Gerente
+                  </label>
+                  <div className="relative mt-1">
+                    <KeyRound
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                      aria-hidden
+                    />
+                    <input
+                      id="stock-auth-pin"
+                      type="password"
+                      inputMode="numeric"
+                      autoFocus
+                      autoComplete="off"
+                      value={stockPin}
+                      onChange={(event) => {
+                        setStockPin(event.target.value);
+                        setStockAuthError(null);
+                      }}
+                      placeholder="••••"
+                      className="h-11 w-full rounded-xl border border-zinc-300 bg-white pl-10 pr-3 text-sm font-semibold tracking-[0.3em] text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Ambiente demonstrativo: PIN 1975.
+                  </p>
+                </div>
+
+                {stockAuthError && (
+                  <p
+                    role="alert"
+                    className="flex items-start gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                  >
+                    <XCircle
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    {stockAuthError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-zinc-200 p-5 sm:flex-row dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setStockAuthOpen(false)}
+                  className="inline-flex flex-1 items-center justify-center rounded-xl border border-zinc-300 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-emerald-600/20 transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+                >
+                  <ShieldCheck className="h-4 w-4" aria-hidden />
+                  Autorizar retirada
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de confirmação */}
       {modalOpen && generatedAt && (
         <div
@@ -1825,7 +2183,7 @@ export default function PdvPage() {
                       Tabela
                     </p>
                     <p className="font-semibold">
-                      {hasAtacado ? "Atacado avulso" : "Varejo"}
+                      {hasAtacado ? "Atacado negociado" : "Varejo"}
                     </p>
                   </div>
                   <div className="col-span-2">
@@ -1838,6 +2196,36 @@ export default function PdvPage() {
                         : "Retirada imediata"}
                     </p>
                   </div>
+
+                  {flagEntregaAguardandoProduto && (
+                    <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                      Flag aplicada: Entrega Aguardando Produto
+                    </div>
+                  )}
+
+                  {alertasCompras.length > 0 && (
+                    <div className="col-span-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300">
+                      <p className="flex items-center gap-1 font-semibold">
+                        <Bell className="h-3 w-3" aria-hidden />
+                        Alerta enviado ao módulo de Compras
+                      </p>
+                      <ul className="mt-1 space-y-0.5 pl-4">
+                        {alertasCompras.map((alerta) => (
+                          <li key={alerta.id} className="list-disc">
+                            {alerta.produto}: {formatQuantity(alerta.solicitado)}{" "}
+                            {alerta.unidade} solicitados ·{" "}
+                            {formatQuantity(alerta.disponivel)} {alerta.unidade}{" "}
+                            em estoque
+                          </li>
+                        ))}
+                      </ul>
+                      {notificacaoLogistica && (
+                        <p className="mt-1 font-medium">
+                          Logística notificada sobre a entrega pendente.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1897,7 +2285,7 @@ export default function PdvPage() {
             </p>
             <p>
               <strong>Tabela:</strong>{" "}
-              {hasAtacado ? "Atacado avulso" : "Varejo"}
+              {hasAtacado ? "Atacado negociado" : "Varejo"}
             </p>
             <p>
               <strong>Entrega:</strong>{" "}

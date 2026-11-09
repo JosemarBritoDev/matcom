@@ -475,3 +475,292 @@ export function calcularDre(dados: DadosDre): ResultadoDre {
     margemOperacionalPercent: arredondar(margemOperacionalPercent, 2),
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/*              5. PDV — trava da tabela de atacado e negociação              */
+/* -------------------------------------------------------------------------- */
+
+export interface ContextoTabelaAtacado {
+  /** Tabela contratada/solicitada pelo cliente. */
+  tabelaCliente: TabelaPreco;
+  /** Situação da aprovação do atacado. */
+  statusTabela: StatusAprovacao;
+  /** Cadastro completo é pré-requisito para negociar atacado. */
+  tipoCadastro: TipoCadastro;
+}
+
+export interface DecisaoTabelaAtacado {
+  /** `true` habilita o vendedor a alternar para atacado item a item. */
+  liberado: boolean;
+  motivo: string;
+}
+
+/**
+ * Decide se o PDV pode liberar a negociação de atacado.
+ *
+ * O PDV sempre inicia na tabela de Varejo (tabela padrão do cadastro). O
+ * atacado é uma concessão comercial: só pode ser alternado quando o cliente
+ * possui tabela ATACADO e `tierStatus = APROVADO`. Pendente, rejeitado ou
+ * cadastro simplificado mantêm a seleção travada no Varejo.
+ */
+export function avaliarLiberacaoAtacado(
+  contexto: ContextoTabelaAtacado,
+): DecisaoTabelaAtacado {
+  const { tabelaCliente, statusTabela, tipoCadastro } = contexto;
+
+  if (tipoCadastro === "SIMPLIFICADO") {
+    return {
+      liberado: false,
+      motivo:
+        "Cadastro simplificado mantém a venda no Varejo. Conclua o cadastro completo e solicite aprovação do Gerente para negociar atacado.",
+    };
+  }
+
+  if (tabelaCliente !== "ATACADO") {
+    return {
+      liberado: false,
+      motivo:
+        "Cliente não possui tabela de Atacado cadastrada. A venda permanece travada no Varejo.",
+    };
+  }
+
+  if (statusTabela === "PENDENTE") {
+    return {
+      liberado: false,
+      motivo:
+        "Solicitação de Atacado pendente. A venda permanece travada no Varejo até a aprovação do Gerente.",
+    };
+  }
+
+  if (statusTabela === "REJEITADO") {
+    return {
+      liberado: false,
+      motivo:
+        "Solicitação de Atacado rejeitada pelo Gerente. A venda permanece travada no Varejo.",
+    };
+  }
+
+  return {
+    liberado: true,
+    motivo:
+      "Atacado aprovado pelo Gerente: o vendedor pode negociar item a item ou aplicar na venda inteira.",
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*             6. Cadastro de produtos — margem bidirecional                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Calcula a margem percentual sobre o custo.
+ *
+ * Fórmula: ((preço de venda - custo) / custo) * 100.
+ * Retorna 0 quando o custo é inválido ou não positivo.
+ */
+export function calcularMargemSobreCusto(
+  custo: number,
+  precoVenda: number,
+): number {
+  if (
+    !numeroValido(custo) ||
+    !numeroValido(precoVenda) ||
+    custo <= 0
+  ) {
+    return 0;
+  }
+
+  return arredondar(((precoVenda - custo) / custo) * 100, 2);
+}
+
+/**
+ * Calcula o preço de venda a partir do custo e da margem target.
+ *
+ * Fórmula: custo * (1 + margem / 100).
+ * Retorna 0 quando o custo é inválido ou não positivo.
+ */
+export function calcularPrecoVendaPorMargem(
+  custo: number,
+  margemPercent: number,
+): number {
+  if (
+    !numeroValido(custo) ||
+    !numeroValido(margemPercent) ||
+    custo <= 0
+  ) {
+    return 0;
+  }
+
+  return arredondar(custo * (1 + margemPercent / 100), 2);
+}
+
+/* -------------------------------------------------------------------------- */
+/*               7. PDV — disponibilidade de estoque e logística              */
+/* -------------------------------------------------------------------------- */
+
+export type StatusEstoque = "OK" | "BAIXO" | "ZERADO" | "INSUFICIENTE";
+
+export interface ContextoEstoque {
+  /** Saldo disponível no momento da venda. */
+  saldo: number;
+  /** Estoque mínimo configurado no produto. */
+  minimo: number;
+  /** Quantidade pedida na comanda; quando informada, valida o saldo. */
+  quantidadeSolicitada?: number;
+}
+
+/**
+ * Classifica o saldo para os indicadores visuais do PDV:
+ * 🟢 OK · 🟡 Estoque baixo · 🔴 Zerado ou insuficiente.
+ */
+export function classificarEstoque(contexto: ContextoEstoque): StatusEstoque {
+  const { saldo, minimo, quantidadeSolicitada } = contexto;
+
+  if (!numeroValido(saldo) || saldo <= 0) {
+    return "ZERADO";
+  }
+
+  if (
+    typeof quantidadeSolicitada === "number" &&
+    numeroValido(quantidadeSolicitada) &&
+    quantidadeSolicitada > saldo
+  ) {
+    return "INSUFICIENTE";
+  }
+
+  if (numeroValido(minimo) && saldo < minimo) {
+    return "BAIXO";
+  }
+
+  return "OK";
+}
+
+export type ModoEntregaVenda = "RETIRADA_IMEDIATA" | "ENTREGA_PENDENTE";
+
+export type FlagLogistica = "ENTREGA_AGUARDANDO_PRODUTO";
+
+export interface AvaliacaoDisponibilidadeVenda {
+  faltaEstoque: boolean;
+  /** Retirada imediata sem saldo exige liberação do Gerente via PIN. */
+  exigeAutorizacaoGerente: boolean;
+  /** Flag aplicada ao pedido de entrega programada. */
+  flagPedido: FlagLogistica | null;
+  notificarCompras: boolean;
+  notificarLogistica: boolean;
+}
+
+/**
+ * Avalia o impacto da falta de estoque conforme o modo de entrega.
+ *
+ * - Retirada imediata: bloqueia até o Gerente liberar por PIN e alerta Compras.
+ * - Entrega programada: conclui a venda com a flag "Entrega Aguardando Produto"
+ *   e notifica Logística e Compras.
+ */
+export function avaliarDisponibilidadeVenda(
+  modoEntrega: ModoEntregaVenda,
+  faltaEstoque: boolean,
+): AvaliacaoDisponibilidadeVenda {
+  if (!faltaEstoque) {
+    return {
+      faltaEstoque: false,
+      exigeAutorizacaoGerente: false,
+      flagPedido: null,
+      notificarCompras: false,
+      notificarLogistica: false,
+    };
+  }
+
+  if (modoEntrega === "RETIRADA_IMEDIATA") {
+    return {
+      faltaEstoque: true,
+      exigeAutorizacaoGerente: true,
+      flagPedido: null,
+      notificarCompras: true,
+      notificarLogistica: false,
+    };
+  }
+
+  return {
+    faltaEstoque: true,
+    exigeAutorizacaoGerente: false,
+    flagPedido: "ENTREGA_AGUARDANDO_PRODUTO",
+    notificarCompras: true,
+    notificarLogistica: true,
+  };
+}
+
+export interface SolicitacaoLiberacaoEstoque {
+  pinInformado: string;
+  pinGerente: string;
+}
+
+export interface AutorizacaoLiberacaoEstoque {
+  autorizada: boolean;
+  motivo: string;
+}
+
+/**
+ * Valida o PIN do Gerente para liberar retirada imediata sem saldo.
+ */
+export function validarLiberacaoEstoque(
+  solicitacao: SolicitacaoLiberacaoEstoque,
+): AutorizacaoLiberacaoEstoque {
+  const { pinInformado, pinGerente } = solicitacao;
+
+  if (!pinGerente.trim()) {
+    return {
+      autorizada: false,
+      motivo:
+        "Nenhum PIN de Gerente está configurado para liberar a retirada sem estoque.",
+    };
+  }
+
+  if (!pinInformado.trim() || pinInformado !== pinGerente) {
+    return {
+      autorizada: false,
+      motivo:
+        "Retirada bloqueada: PIN de Gerente ausente ou incorreto. Operação não autorizada.",
+    };
+  }
+
+  return {
+    autorizada: true,
+    motivo:
+      "Retirada liberada pelo Gerente. Alerta de reposição enviado ao módulo de Compras.",
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*                 8. Compras — custo efetivo da entrada NF-e                 */
+/* -------------------------------------------------------------------------- */
+
+export interface CustoEfetivoEntrada {
+  custoBruto: number;
+  /** Valor do IPI destacado na nota. */
+  ipi?: number;
+  /** Valor do ICMS-ST destacado na nota. */
+  icmsSt?: number;
+  /** Frete e demais despesas acessórias. */
+  freteDespesas?: number;
+}
+
+/**
+ * Calcula o custo efetivo de entrada:
+ * Custo Bruto + IPI + ICMS-ST + Frete/Despesas.
+ *
+ * A entrada por controle físico pode usar apenas `custoBruto`, sem XML fiscal.
+ */
+export function calcularCustoEfetivo(entrada: CustoEfetivoEntrada): number {
+  const { custoBruto, ipi = 0, icmsSt = 0, freteDespesas = 0 } = entrada;
+
+  const valores = [custoBruto, ipi, icmsSt, freteDespesas];
+
+  if (!valores.every(numeroValido)) {
+    throw new Error("Valores inválidos para cálculo do custo efetivo.");
+  }
+
+  if (valores.some((valor) => valor < 0)) {
+    throw new Error("Valores negativos não são permitidos no custo efetivo.");
+  }
+
+  return arredondar(custoBruto + ipi + icmsSt + freteDespesas, 2);
+}

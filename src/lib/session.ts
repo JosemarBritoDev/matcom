@@ -18,6 +18,9 @@ export interface SessaoAtiva {
   origem: "mock";
 }
 
+/** Rótulo exibido no Header quando a demonstração está habilitada. */
+export const ROTULO_MODO_DEMO = "[Modo Demo Vercel]";
+
 const SESSAO_DESENVOLVIMENTO: SessaoAtiva = {
   userId: "dev-super-admin",
   tenantId: "tenant-matcom",
@@ -26,18 +29,40 @@ const SESSAO_DESENVOLVIMENTO: SessaoAtiva = {
   origem: "mock",
 };
 
-/** Retorna uma sessão mock somente fora de produção; produção falha fechada. */
+/**
+ * Indica se o modo de demonstração/QA está habilitado.
+ *
+ * A flag `NEXT_PUBLIC_DEMO_MODE` é lida no servidor e no cliente (o prefixo
+ * `NEXT_PUBLIC_` é inlinado pelo Next.js no bundle). Ela existe para permitir
+ * validar a navegação e os dados simulados em Preview/Produção na Vercel sem
+ * liberar a sessão mock em ambientes reais por acidente.
+ */
+export function modoDemoAtivo(): boolean {
+  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+}
+
+/**
+ * A sessão mock é permitida em desenvolvimento e, em produção, apenas quando
+ * o modo demo estiver explicitamente ativado. Sem a flag, o sistema continua
+ * falhando fechado.
+ */
+function sessaoMockPermitida(): boolean {
+  return process.env.NODE_ENV !== "production" || modoDemoAtivo();
+}
+
+/**
+ * Retorna a sessão mock quando o ambiente permite demonstração.
+ * Fora de desenvolvimento, exige `NEXT_PUBLIC_DEMO_MODE=true`.
+ */
 export function resolverSessaoAtiva(): SessaoAtiva | null {
-  return process.env.NODE_ENV === "production"
-    ? null
-    : SESSAO_DESENVOLVIMENTO;
+  return sessaoMockPermitida() ? SESSAO_DESENVOLVIMENTO : null;
 }
 
 export function podeAdministrarSaas(
   sessao: SessaoAtiva | null | undefined,
 ): boolean {
   return (
-    process.env.NODE_ENV !== "production" &&
+    sessaoMockPermitida() &&
     !!sessao &&
     sessao.origem === "mock" &&
     sessao.role === "SUPER_ADMIN"
@@ -49,7 +74,7 @@ export function podeAcessarTenant(
   tenantId: string,
 ): boolean {
   return (
-    process.env.NODE_ENV !== "production" &&
+    sessaoMockPermitida() &&
     !!sessao &&
     tenantId.length > 0 &&
     (sessao.role === "SUPER_ADMIN" || sessao.tenantId === tenantId)
